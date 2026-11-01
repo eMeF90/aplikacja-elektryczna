@@ -75,6 +75,8 @@ export default function ForemanPanel() {
   const [orderTitle, setOrderTitle] = useState('')
   const [orderQuantity, setOrderQuantity] = useState('')
   const [orderNotes, setOrderNotes] = useState('')
+  const [orderLocation, setOrderLocation] = useState('')
+  const [orderFiles, setOrderFiles] = useState<File[]>([]) 
 
   const [previewFile, setPreviewFile] = useState<{ title: string; url: string } | null>(null)
 
@@ -398,39 +400,59 @@ export default function ForemanPanel() {
     }
   }
 
-  const handleCreateOrderSubmit = async () => {
-    if (!orderTitle || !selectedProject || !userProfile) {
-      alert('Podaj nazwę materiału / zamówienia!')
-      return
-    }
-    setLoading(true)
-
-    try {
-      const { error } = await supabase.from('material_requests').insert({
-        project_id: selectedProject,
-        user_id: userProfile.id,
-        item_name: orderTitle,
-        quantity: orderQuantity,
-        notes: orderNotes,
-        status: 'pending',
-      })
-
-      if (!error) {
-        alert('Zgłoszono zapotrzebowanie na materiały do Biura / Admina!')
-        setShowOrderModal(false)
-        setOrderTitle('')
-        setOrderQuantity('')
-        setOrderNotes('')
-        fetchForemanData(selectedProject, userProfile.id)
-      } else {
-        alert('Błąd dodawania zamówienia: ' + error.message)
-      }
-    } catch (err: any) {
-      alert('Błąd: ' + err.message)
-    } finally {
-      setLoading(false)
-    }
+const handleCreateOrderSubmit = async () => {
+  if (!orderTitle || !selectedProject || !userProfile) {
+    alert('Podaj nazwę materiału / zamówienia!')
+    return
   }
+  setLoading(true)
+
+  try {
+    const uploadedUrls: string[] = []
+
+    // Wgrywanie zdjęć/załączników zamówienia
+    for (const file of orderFiles) {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `order-attachments/${selectedProject}/${Date.now()}_${Math.random().toString(36).substring(2, 6)}.${fileExt}`
+
+      const { error: uploadErr } = await supabase.storage
+        .from('project-photos')
+        .upload(fileName, file)
+
+      if (!uploadErr) {
+        const { data } = supabase.storage.from('project-photos').getPublicUrl(fileName)
+        if (data?.publicUrl) uploadedUrls.push(data.publicUrl)
+      }
+    }
+
+    const { error } = await supabase.from('material_requests').insert({
+      project_id: selectedProject,
+      user_id: userProfile.id,
+      item_name: orderTitle,
+      quantity: orderQuantity,
+      notes: `Lokalizacja dostawy: ${orderLocation || 'Brak'}${orderNotes ? ` | Uwagi: ${orderNotes}` : ''}`,
+      attachments: uploadedUrls,
+      status: 'pending',
+    })
+
+    if (!error) {
+      alert('Zgłoszono zamówienie materiałów do Biura / Admina!')
+      setShowOrderModal(false)
+      setOrderTitle('')
+      setOrderQuantity('')
+      setOrderLocation('')
+      setOrderNotes('')
+      setOrderFiles([])
+      fetchForemanData(selectedProject, userProfile.id)
+    } else {
+      alert('Błąd dodawania zamówienia: ' + error.message)
+    }
+  } catch (err: any) {
+    alert('Błąd: ' + err.message)
+  } finally {
+    setLoading(false)
+  }
+}
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -1078,70 +1100,112 @@ export default function ForemanPanel() {
 
       {/* MODAL: ZAMÓWIENIE MATERIAŁÓW */}
       {showOrderModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h4 className="font-bold text-sm text-white">Zamówienie Materiałów</h4>
-              <button onClick={() => setShowOrderModal(false)} className="text-slate-400 hover:text-white">
-                <X size={18} />
-              </button>
-            </div>
+  <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h4 className="font-bold text-sm text-white">Zamówienie Materiałów</h4>
+        <button onClick={() => setShowOrderModal(false)} className="text-slate-400 hover:text-white">
+          <X size={18} />
+        </button>
+      </div>
 
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-400 mb-1">Nazwa materiału / sprzętu:</label>
-                <input
-                  type="text"
-                  placeholder="np. Przewód YDYp 3x1.5..."
-                  value={orderTitle}
-                  onChange={(e) => setOrderTitle(e.target.value)}
-                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1">Ilość:</label>
-                <input
-                  type="text"
-                  placeholder="np. 500m / 10 sztuk..."
-                  value={orderQuantity}
-                  onChange={(e) => setOrderQuantity(e.target.value)}
-                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1">Dodatkowe uwagi:</label>
-                <input
-                  type="text"
-                  placeholder="np. Pilne na wtorek..."
-                  value={orderNotes}
-                  onChange={(e) => setOrderNotes(e.target.value)}
-                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowOrderModal(false)}
-                className="flex-1 py-3 bg-slate-800 text-slate-300 font-semibold rounded-xl text-xs"
-              >
-                Anuluj
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateOrderSubmit}
-                disabled={loading}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow-lg"
-              >
-                Wyślij Zamówienie
-              </button>
-            </div>
-          </div>
+      <div className="space-y-3 text-xs">
+        <div>
+          <label className="block text-slate-400 mb-1">Nazwa materiału / sprzętu:</label>
+          <input
+            type="text"
+            placeholder="np. Przewód YDYp 3x1.5..."
+            value={orderTitle}
+            onChange={(e) => setOrderTitle(e.target.value)}
+            className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500"
+          />
         </div>
-      )}
+
+        <div>
+          <label className="block text-slate-400 mb-1">Ilość:</label>
+          <input
+            type="text"
+            placeholder="np. 500m / 10 sztuk..."
+            value={orderQuantity}
+            onChange={(e) => setOrderQuantity(e.target.value)}
+            className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-slate-400 mb-1">Miejsce / Lokalizacja dostawy na budowie:</label>
+          <input
+            type="text"
+            placeholder="np. Piętro 1, Rozdzielnia Główna..."
+            value={orderLocation}
+            onChange={(e) => setOrderLocation(e.target.value)}
+            className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-slate-400 mb-1">Dodatkowe uwagi:</label>
+          <input
+            type="text"
+            placeholder="np. Pilne na wtorek rano..."
+            value={orderNotes}
+            onChange={(e) => setOrderNotes(e.target.value)}
+            className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
+        {/* POLE WYBORU ZDJĘCIA (APARAT LUB GALERIA) */}
+        <div>
+          <label className="block text-slate-400 mb-1">Załącz zdjęcie (np. tabliczki, specyfikacji):</label>
+          <div className="border-2 border-dashed border-slate-800 rounded-xl p-3 text-center bg-slate-950 cursor-pointer hover:border-blue-500 transition-all">
+            <input
+              type="file"
+              multiple
+              onChange={(e) => setOrderFiles(Array.from(e.target.files || []))}
+              className="hidden"
+              id="order-photo-input"
+            />
+            <label htmlFor="order-photo-input" className="cursor-pointer flex flex-col items-center gap-1.5">
+              <Camera className="text-blue-400" size={24} />
+              <span className="text-[12px] text-blue-400 font-bold">Zrób zdjęcie lub Wybierz z Galerii</span>
+            </label>
+          </div>
+
+          {orderFiles.length > 0 && (
+            <div className="space-y-1 pt-2">
+              {orderFiles.map((f, idx) => (
+                <div key={idx} className="p-2 bg-slate-950 border border-slate-800 rounded-lg flex justify-between items-center text-[11px] text-slate-300">
+                  <span className="truncate">{f.name}</span>
+                  <button type="button" onClick={() => setOrderFiles(orderFiles.filter((_, i) => i !== idx))} className="text-rose-400">
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex gap-2 pt-2">
+        <button
+          type="button"
+          onClick={() => setShowOrderModal(false)}
+          className="flex-1 py-3 bg-slate-800 text-slate-300 font-semibold rounded-xl text-xs"
+        >
+          Anuluj
+        </button>
+        <button
+          type="button"
+          onClick={handleCreateOrderSubmit}
+          disabled={loading}
+          className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow-lg"
+        >
+          Wyślij Zamówienie
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* PODGLĄD ZDJĘĆ / PLIKÓW */}
       {previewFile && (
