@@ -512,7 +512,7 @@ export default function WorkerPanel() {
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      className="min-h-screen bg-slate-950 text-white max-w-md mx-auto relative flex flex-col justify-between overflow-x-hidden font-sans"
+      className="min-h-screen bg-slate-950 text-white w-full relative flex flex-col justify-between overflow-x-hidden font-sans"
     >
       {/* Subtelny pasek nawigacyjny na całej wysokości lewej krawędzi */}
       <div
@@ -520,14 +520,6 @@ export default function WorkerPanel() {
         className="fixed top-0 left-0 bottom-0 w-2 z-40 bg-blue-500/30 hover:bg-blue-500/60 transition-all cursor-pointer"
         title="Przesuń w prawo, aby otworzyć panel"
       />
-
-      <button
-        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className="fixed left-0 top-1/2 -translate-y-1/2 z-40 bg-blue-600 hover:bg-blue-500 text-white p-2.5 rounded-r-2xl shadow-2xl flex items-center justify-center border-y border-r border-blue-400/50 transition-all active:scale-95"
-        title="Otwórz menu nawigacji"
-      >
-        {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight className="animate-pulse" size={20} />}
-      </button>
 
       {isSidebarOpen && (
         <div
