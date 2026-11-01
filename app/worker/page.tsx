@@ -110,7 +110,7 @@ export default function WorkerPanel() {
     return () => clearInterval(interval)
   }, [activeLog, isOnBreak, breakSeconds])
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.targetTouches[0].clientX
     touchEndX.current = e.targetTouches[0].clientX
   }
@@ -119,18 +119,22 @@ export default function WorkerPanel() {
     touchEndX.current = e.targetTouches[0].clientX
   }
 
-  const handleTouchEnd = () => {
-    // Reaguj tylko gdy punkt początkowy gestu jest przy lewej krawędzi (do 40px)
-    if (touchStartX.current < 40 && touchEndX.current - touchStartX.current > 50) {
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const diffX = touchEndX.current - touchStartX.current
+
+    // Reaguj TYLKO na swipe od lewej krawędzi (pierwsze 40px)
+    if (touchStartX.current < 40 && diffX > 50) {
+      e.preventDefault()
       setIsSidebarOpen(true)
-    } else if (isSidebarOpen && touchStartX.current - touchEndX.current > 50) {
+    } else if (isSidebarOpen && diffX < -50) {
+      e.preventDefault()
       setIsSidebarOpen(false)
     }
-    // Wygaszenie zmiennych - zapobiega przechodzeniu do logowania
+
+    // Resetuj punkty dotyku
     touchStartX.current = 0
     touchEndX.current = 0
   }
-
   const initWorker = async () => {
     try {
       const { data: { user }, error: authErr } = await supabase.auth.getUser()
@@ -533,6 +537,7 @@ export default function WorkerPanel() {
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      style={{ overscrollBehaviorX: 'none', touchAction: 'pan-y' }}
       className="min-h-screen bg-slate-950 text-white w-full relative flex flex-col justify-between overflow-x-hidden font-sans"
     >
       {/* Subtelny niebieski pasek wskaźnika nawigacji na lewej krawędzi */}
