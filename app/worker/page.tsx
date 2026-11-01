@@ -110,7 +110,7 @@ export default function WorkerPanel() {
     return () => clearInterval(interval)
   }, [activeLog, isOnBreak, breakSeconds])
 
-const handleTouchStart = (e: React.TouchEvent) => {
+  const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.targetTouches[0].clientX
     touchEndX.current = e.targetTouches[0].clientX
   }
@@ -121,8 +121,6 @@ const handleTouchStart = (e: React.TouchEvent) => {
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     const diffX = touchEndX.current - touchStartX.current
-
-    // Reaguj TYLKO na swipe od lewej krawędzi (pierwsze 40px)
     if (touchStartX.current < 40 && diffX > 50) {
       e.preventDefault()
       setIsSidebarOpen(true)
@@ -130,11 +128,10 @@ const handleTouchStart = (e: React.TouchEvent) => {
       e.preventDefault()
       setIsSidebarOpen(false)
     }
-
-    // Resetuj punkty dotyku
     touchStartX.current = 0
     touchEndX.current = 0
   }
+
   const initWorker = async () => {
     try {
       const { data: { user }, error: authErr } = await supabase.auth.getUser()
@@ -199,7 +196,7 @@ const handleTouchStart = (e: React.TouchEvent) => {
 
       if (taskData) setTasks(taskData)
 
-      // POBIERANIE ZDJĘĆ ZALOGOWANEGO UŻYTKOWNIKA
+      // Pobieranie wszystkich zdjęć wrzuconych przez tego pracownika
       const { data: photoData, error: photoErr } = await supabase
         .from('project_photos')
         .select('*, tasks(title)')
@@ -308,7 +305,6 @@ const handleTouchStart = (e: React.TouchEvent) => {
     setLoading(true)
 
     try {
-      // Przypisanie pracownika do zadania
       const { error: assignErr } = await supabase.from('task_assignments').insert({
         task_id: taskId,
         user_id: userProfile.id,
@@ -317,7 +313,6 @@ const handleTouchStart = (e: React.TouchEvent) => {
       if (assignErr) {
         alert('Błąd przypisywania do zadania: ' + assignErr.message)
       } else {
-        // Zmiana statusu zadania na "W trakcie"
         await supabase
           .from('tasks')
           .update({ status: 'in_progress' })
@@ -371,7 +366,7 @@ const handleTouchStart = (e: React.TouchEvent) => {
 
           const photoUrl = publicUrlData?.publicUrl || ''
 
-          await supabase.from('project_photos').insert({
+          const { error: photoInsertErr } = await supabase.from('project_photos').insert({
             project_id: selectedProject,
             task_id: taskId,
             uploaded_by: userProfile.id,
@@ -379,6 +374,12 @@ const handleTouchStart = (e: React.TouchEvent) => {
             photo_url: photoUrl,
             description: `Wykonano zadanie przez ${userProfile.full_name}`,
           })
+
+          if (photoInsertErr) {
+            console.error('Błąd zapisu zdjęcia do bazy:', photoInsertErr)
+          }
+        } else {
+          console.error('Błąd wgrywania pliku do Storage:', uploadErr)
         }
       }
 
@@ -390,7 +391,8 @@ const handleTouchStart = (e: React.TouchEvent) => {
       if (!updateErr) {
         alert('Zgłoszono wykonanie zadania do Brygadzisty!')
         setTaskPhotoFiles((prev) => ({ ...prev, [taskId]: [] }))
-        fetchTasksAndData(selectedProject, userProfile.id)
+        // Odświeżenie danych i zaktualizowanie zakładek
+        await fetchTasksAndData(selectedProject, userProfile.id)
       } else {
         alert('Błąd aktualizacji zadania: ' + updateErr.message)
       }
@@ -542,7 +544,6 @@ const handleTouchStart = (e: React.TouchEvent) => {
       style={{ overscrollBehaviorX: 'none', touchAction: 'pan-y' }}
       className="min-h-screen bg-slate-950 text-white w-full relative flex flex-col justify-between overflow-x-hidden font-sans"
     >
-      {/* Subtelny niebieski pasek wskaźnika nawigacji na lewej krawędzi */}
       <div
         onClick={() => setIsSidebarOpen(true)}
         className="fixed top-0 left-0 bottom-0 w-2 z-40 bg-blue-500/30 hover:bg-blue-500/60 transition-all cursor-pointer"
@@ -612,7 +613,7 @@ const handleTouchStart = (e: React.TouchEvent) => {
                   : 'text-slate-400 hover:bg-slate-800 hover:text-white'
               }`}
             >
-              <ImageIcon size={18} /> 3. Dodane Zdjęcia
+              <ImageIcon size={18} /> 3. Dodane Zdjęcia ({workerPhotos.length})
             </button>
 
             <button
@@ -844,7 +845,6 @@ const handleTouchStart = (e: React.TouchEvent) => {
                           </div>
                         )}
 
-                        {/* PODEJMIJ SIĘ ZADANIA - Przed podjęciem */}
                         {!isClaimedByMe ? (
                           <button
                             onClick={() => handleClaimTask(task.id)}
@@ -854,7 +854,6 @@ const handleTouchStart = (e: React.TouchEvent) => {
                             <UserCheck size={16} /> PODEJMIJ SIĘ ZADANIA
                           </button>
                         ) : (
-                          /* SEKCJA ZDJĘĆ I ZGŁASZANIA - Po podjęciu */
                           <div className="space-y-4 pt-2 border-t border-slate-900">
                             <div className="p-2.5 bg-emerald-950/40 border border-emerald-500/40 rounded-xl text-emerald-300 flex items-center gap-2 text-[11px] font-semibold">
                               <UserCheck size={15} /> Podjąłeś się tego zadania (widoczne dla Brygadzisty)
@@ -862,13 +861,13 @@ const handleTouchStart = (e: React.TouchEvent) => {
 
                             <div className="space-y-2">
                               <label className="block text-slate-300 font-semibold">
-                                Zrób / dodaj zdjęcie z wykonania zadania:
+                                Dodaj zdjęcie z wykonania zadania:
                               </label>
 
+                              {/* Pole wyboru plików - Działa zarówno Aparat jak i Galeria/Pamięć telefonu */}
                               <div className="border-2 border-dashed border-slate-800 rounded-xl p-3 text-center bg-slate-900 cursor-pointer hover:border-blue-500 transition-all">
                                 <input
                                   type="file"
-                                  accept="image/*,image/heic,image/heif"
                                   multiple
                                   onChange={(e) => handleTaskFileSelect(task.id, e.target.files)}
                                   className="hidden"
@@ -876,15 +875,11 @@ const handleTouchStart = (e: React.TouchEvent) => {
                                 />
                                 <label
                                   htmlFor={`task-photo-${task.id}`}
-                                  className="cursor-pointer flex flex-col items-center gap-1"
+                                  className="cursor-pointer flex flex-col items-center gap-1.5"
                                 >
-                                  <Camera className="text-blue-400" size={22} />
-                                  <span className="text-[11px] text-slate-300 font-semibold">Wybierz zdjęcia (Galeria / Pamięć / Aparat)</span>
-                                </label>
-                              </div>
-                                >
-                                  <Camera className="text-blue-400" size={22} />
-                                  <span className="text-[11px] text-slate-300 font-semibold">Otwórz aparat / wybierz zdjęcia</span>
+                                  <Camera className="text-blue-400" size={24} />
+                                  <span className="text-[12px] text-blue-400 font-bold">Zrób zdjęcie lub Wybierz z Galerii</span>
+                                  <span className="text-[10px] text-slate-400">Kliknij, aby otworzyć opcje telefonu</span>
                                 </label>
                               </div>
 
