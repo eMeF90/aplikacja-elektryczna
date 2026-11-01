@@ -199,12 +199,14 @@ const handleTouchStart = (e: React.TouchEvent) => {
 
       if (taskData) setTasks(taskData)
 
-      const { data: photoData } = await supabase
+      // POBIERANIE ZDJĘĆ ZALOGOWANEGO UŻYTKOWNIKA
+      const { data: photoData, error: photoErr } = await supabase
         .from('project_photos')
         .select('*, tasks(title)')
         .eq('uploaded_by', userId)
         .order('created_at', { ascending: false })
 
+      if (photoErr) console.error('Błąd pobierania zdjęć:', photoErr)
       if (photoData) setWorkerPhotos(photoData)
     } catch (err: any) {
       console.error('Błąd pobierania danych pracownika:', err)
@@ -864,22 +866,22 @@ const handleTouchStart = (e: React.TouchEvent) => {
                               </label>
 
                               <div className="border-2 border-dashed border-slate-800 rounded-xl p-3 text-center bg-slate-900 cursor-pointer hover:border-blue-500 transition-all">
-                                 <input
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    onChange={(e) => handleTaskFileSelect(task.id, e.target.files)}
-                                    className="hidden"
-                                    id={`task-photo-${task.id}`}
-                                  />
-                                  <label
-                                    htmlFor={`task-photo-${task.id}`}
-                                    className="cursor-pointer flex flex-col items-center gap-1"
-                                   >
-                                    <Camera className="text-blue-400" size={22} />
-                                    <span className="text-[11px] text-slate-300 font-semibold">Dodaj zdjęcie (Aparat lub Galeria)</span>
-                                  </label>
-                                </div>
+                                <input
+                                  type="file"
+                                  accept="image/*,image/heic,image/heif"
+                                  multiple
+                                  onChange={(e) => handleTaskFileSelect(task.id, e.target.files)}
+                                  className="hidden"
+                                  id={`task-photo-${task.id}`}
+                                />
+                                <label
+                                  htmlFor={`task-photo-${task.id}`}
+                                  className="cursor-pointer flex flex-col items-center gap-1"
+                                >
+                                  <Camera className="text-blue-400" size={22} />
+                                  <span className="text-[11px] text-slate-300 font-semibold">Wybierz zdjęcia (Galeria / Pamięć / Aparat)</span>
+                                </label>
+                              </div>
                                 >
                                   <Camera className="text-blue-400" size={22} />
                                   <span className="text-[11px] text-slate-300 font-semibold">Otwórz aparat / wybierz zdjęcia</span>
