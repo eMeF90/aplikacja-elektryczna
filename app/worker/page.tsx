@@ -159,8 +159,9 @@ export default function WorkerPanel() {
     }
   }
 
-  const fetchTasksAndData = async (projId: string, userId: string) => {
+const fetchTasksAndData = async (projId: string, userId: string) => {
     try {
+      // 1. POBIERANIE AKTYWNEGO LOGU - TYLKO DLA TEGO UŻYTKOWNIKA
       const { data: openLog } = await supabase
         .from('time_logs')
         .select('*')
@@ -170,22 +171,25 @@ export default function WorkerPanel() {
 
       setActiveLog(openLog || null)
 
+      // 2. POBIERANIE HISTORII GODZIN - TYLKO DLA TEGO UŻYTKOWNIKA
       const { data: history } = await supabase
         .from('time_logs')
         .select('*, projects(title)')
-        .eq('user_id', userId)
+        .eq('user_id', userId) // <-- Kluczowe filtrowanie po ID konta
         .not('end_time', 'is', null)
         .order('start_time', { ascending: true })
 
       if (history) setHistoricalLogs(history)
 
+      // 3. POBIERANIE WNIOSKÓW URLOPOWYCH - TYLKO DLA TEGO UŻYTKOWNIKA
       const { data: vacations } = await supabase
         .from('vacation_requests')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', userId) // <-- Kluczowe filtrowanie po ID konta
 
       if (vacations) setVacationRequests(vacations)
 
+      // 4. ZADANIA DLA WYBRANEJ BUDOWY
       const { data: taskData } = await supabase
         .from('tasks')
         .select('*, task_assignments(user_id, profiles(full_name)), project_photos(*)')
@@ -194,10 +198,11 @@ export default function WorkerPanel() {
 
       if (taskData) setTasks(taskData)
 
+      // 5. ZDJĘCIA DODANE PRZEZ TEGO UŻYTKOWNIKA
       const { data: photoData } = await supabase
         .from('project_photos')
         .select('*, tasks(title)')
-        .eq('uploaded_by', userId)
+        .eq('uploaded_by', userId) // <-- Filtrowanie po ID dodającego
         .order('created_at', { ascending: false })
 
       if (photoData) setWorkerPhotos(photoData)
