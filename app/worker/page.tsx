@@ -864,18 +864,22 @@ const handleTouchStart = (e: React.TouchEvent) => {
                               </label>
 
                               <div className="border-2 border-dashed border-slate-800 rounded-xl p-3 text-center bg-slate-900 cursor-pointer hover:border-blue-500 transition-all">
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  capture="environment"
-                                  multiple
-                                  onChange={(e) => handleTaskFileSelect(task.id, e.target.files)}
-                                  className="hidden"
-                                  id={`task-photo-${task.id}`}
-                                />
-                                <label
-                                  htmlFor={`task-photo-${task.id}`}
-                                  className="cursor-pointer flex flex-col items-center gap-1"
+                                 <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={(e) => handleTaskFileSelect(task.id, e.target.files)}
+                                    className="hidden"
+                                    id={`task-photo-${task.id}`}
+                                  />
+                                  <label
+                                    htmlFor={`task-photo-${task.id}`}
+                                    className="cursor-pointer flex flex-col items-center gap-1"
+                                   >
+                                    <Camera className="text-blue-400" size={22} />
+                                    <span className="text-[11px] text-slate-300 font-semibold">Dodaj zdjęcie (Aparat lub Galeria)</span>
+                                  </label>
+                                </div>
                                 >
                                   <Camera className="text-blue-400" size={22} />
                                   <span className="text-[11px] text-slate-300 font-semibold">Otwórz aparat / wybierz zdjęcia</span>
