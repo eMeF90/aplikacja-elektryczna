@@ -12,8 +12,6 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  ChevronRight,
-  ChevronLeft,
   ChevronDown,
   ChevronUp,
   FileText,
@@ -27,6 +25,7 @@ import {
   Download,
   Palmtree,
   HeartPulse,
+  UserCheck,
 } from 'lucide-react'
 
 const MONTH_NAMES = [
@@ -121,13 +120,15 @@ export default function WorkerPanel() {
   }
 
   const handleTouchEnd = () => {
-    // Reaguj tylko gdy punkt początkowy gestu jest w pierwszych 40px od lewej krawędzi
+    // Reaguj tylko gdy punkt początkowy gestu jest przy lewej krawędzi (do 40px)
     if (touchStartX.current < 40 && touchEndX.current - touchStartX.current > 50) {
       setIsSidebarOpen(true)
-    }
-    if (isSidebarOpen && touchStartX.current - touchEndX.current > 50) {
+    } else if (isSidebarOpen && touchStartX.current - touchEndX.current > 50) {
       setIsSidebarOpen(false)
     }
+    // Wygaszenie zmiennych - zapobiega przechodzeniu do logowania
+    touchStartX.current = 0
+    touchEndX.current = 0
   }
 
   const initWorker = async () => {
@@ -159,9 +160,8 @@ export default function WorkerPanel() {
     }
   }
 
-const fetchTasksAndData = async (projId: string, userId: string) => {
+  const fetchTasksAndData = async (projId: string, userId: string) => {
     try {
-      // 1. POBIERANIE AKTYWNEGO LOGU - TYLKO DLA TEGO UŻYTKOWNIKA
       const { data: openLog } = await supabase
         .from('time_logs')
         .select('*')
@@ -171,25 +171,22 @@ const fetchTasksAndData = async (projId: string, userId: string) => {
 
       setActiveLog(openLog || null)
 
-      // 2. POBIERANIE HISTORII GODZIN - TYLKO DLA TEGO UŻYTKOWNIKA
       const { data: history } = await supabase
         .from('time_logs')
         .select('*, projects(title)')
-        .eq('user_id', userId) // <-- Kluczowe filtrowanie po ID konta
+        .eq('user_id', userId)
         .not('end_time', 'is', null)
         .order('start_time', { ascending: true })
 
       if (history) setHistoricalLogs(history)
 
-      // 3. POBIERANIE WNIOSKÓW URLOPOWYCH - TYLKO DLA TEGO UŻYTKOWNIKA
       const { data: vacations } = await supabase
         .from('vacation_requests')
         .select('*')
-        .eq('user_id', userId) // <-- Kluczowe filtrowanie po ID konta
+        .eq('user_id', userId)
 
       if (vacations) setVacationRequests(vacations)
 
-      // 4. ZADANIA DLA WYBRANEJ BUDOWY
       const { data: taskData } = await supabase
         .from('tasks')
         .select('*, task_assignments(user_id, profiles(full_name)), project_photos(*)')
@@ -198,11 +195,10 @@ const fetchTasksAndData = async (projId: string, userId: string) => {
 
       if (taskData) setTasks(taskData)
 
-      // 5. ZDJĘCIA DODANE PRZEZ TEGO UŻYTKOWNIKA
       const { data: photoData } = await supabase
         .from('project_photos')
         .select('*, tasks(title)')
-        .eq('uploaded_by', userId) // <-- Filtrowanie po ID dodającego
+        .eq('uploaded_by', userId)
         .order('created_at', { ascending: false })
 
       if (photoData) setWorkerPhotos(photoData)
@@ -301,6 +297,36 @@ const fetchTasksAndData = async (projId: string, userId: string) => {
     setIsOnBreak(!isOnBreak)
   }
 
+  const handleClaimTask = async (taskId: string) => {
+    if (!userProfile) return
+    setLoading(true)
+
+    try {
+      // Przypisanie pracownika do zadania
+      const { error: assignErr } = await supabase.from('task_assignments').insert({
+        task_id: taskId,
+        user_id: userProfile.id,
+      })
+
+      if (assignErr) {
+        alert('Błąd przypisywania do zadania: ' + assignErr.message)
+      } else {
+        // Zmiana statusu zadania na "W trakcie"
+        await supabase
+          .from('tasks')
+          .update({ status: 'in_progress' })
+          .eq('id', taskId)
+
+        alert('Pomyślnie podjęto się zadania!')
+        fetchTasksAndData(selectedProject, userProfile.id)
+      }
+    } catch (err: any) {
+      alert('Wystąpił błąd: ' + err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleTaskFileSelect = (taskId: string, files: FileList | null) => {
     if (!files) return
     const selectedFiles = Array.from(files)
@@ -348,16 +374,6 @@ const fetchTasksAndData = async (projId: string, userId: string) => {
             description: `Wykonano zadanie przez ${userProfile.full_name}`,
           })
         }
-      }
-
-      const currentTask = tasks.find((t) => t.id === taskId)
-      const isAssigned = currentTask?.task_assignments?.some((ta: any) => ta.user_id === userProfile.id)
-
-      if (!isAssigned) {
-        await supabase.from('task_assignments').insert({
-          task_id: taskId,
-          user_id: userProfile.id,
-        })
       }
 
       const { error: updateErr } = await supabase
@@ -519,7 +535,7 @@ const fetchTasksAndData = async (projId: string, userId: string) => {
       onTouchEnd={handleTouchEnd}
       className="min-h-screen bg-slate-950 text-white w-full relative flex flex-col justify-between overflow-x-hidden font-sans"
     >
-      {/* Subtelny pasek nawigacyjny na całej wysokości lewej krawędzi */}
+      {/* Subtelny niebieski pasek wskaźnika nawigacji na lewej krawędzi */}
       <div
         onClick={() => setIsSidebarOpen(true)}
         className="fixed top-0 left-0 bottom-0 w-2 z-40 bg-blue-500/30 hover:bg-blue-500/60 transition-all cursor-pointer"
@@ -757,6 +773,7 @@ const fetchTasksAndData = async (projId: string, userId: string) => {
                 const isExpanded = expandedTaskId === task.id
                 const taskFiles = taskPhotoFiles[task.id] || []
                 const attachments = Array.isArray(task.attachments) ? task.attachments : []
+                const isClaimedByMe = task.task_assignments?.some((ta: any) => ta.user_id === userProfile?.id)
 
                 return (
                   <div
@@ -820,59 +837,78 @@ const fetchTasksAndData = async (projId: string, userId: string) => {
                           </div>
                         )}
 
-                        <div className="pt-2 border-t border-slate-900 space-y-2">
-                          <label className="block text-slate-300 font-semibold">
-                            Zrób / dodaj zdjęcie z wykonania zadania:
-                          </label>
-
-                          <div className="border-2 border-dashed border-slate-800 rounded-xl p-3 text-center bg-slate-900 cursor-pointer hover:border-blue-500 transition-all">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              multiple
-                              onChange={(e) => handleTaskFileSelect(task.id, e.target.files)}
-                              className="hidden"
-                              id={`task-photo-${task.id}`}
-                            />
-                            <label
-                              htmlFor={`task-photo-${task.id}`}
-                              className="cursor-pointer flex flex-col items-center gap-1"
-                            >
-                              <Camera className="text-blue-400" size={20} />
-                              <span className="text-[11px] text-slate-400">Kliknij, aby dodać zdjęcia</span>
-                            </label>
-                          </div>
-
-                          {taskFiles.length > 0 && (
-                            <div className="space-y-1 pt-1">
-                              {taskFiles.map((f, idx) => (
-                                <div
-                                  key={idx}
-                                  className="p-2 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between text-[11px] text-slate-300"
-                                >
-                                  <span className="truncate flex items-center gap-1.5 font-medium">
-                                    <ImageIcon className="text-emerald-400" size={14} /> {f.name}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveTaskFile(task.id, idx)}
-                                    className="p-1 text-slate-400 hover:text-rose-400"
-                                  >
-                                    <X size={14} />
-                                  </button>
-                                </div>
-                              ))}
+                        {/* PODEJMIJ SIĘ ZADANIA - Przed podjęciem */}
+                        {!isClaimedByMe ? (
+                          <button
+                            onClick={() => handleClaimTask(task.id)}
+                            disabled={loading}
+                            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg transition-all active:scale-98 disabled:opacity-50"
+                          >
+                            <UserCheck size={16} /> PODEJMIJ SIĘ ZADANIA
+                          </button>
+                        ) : (
+                          /* SEKCJA ZDJĘĆ I ZGŁASZANIA - Po podjęciu */
+                          <div className="space-y-4 pt-2 border-t border-slate-900">
+                            <div className="p-2.5 bg-emerald-950/40 border border-emerald-500/40 rounded-xl text-emerald-300 flex items-center gap-2 text-[11px] font-semibold">
+                              <UserCheck size={15} /> Podjąłeś się tego zadania (widoczne dla Brygadzisty)
                             </div>
-                          )}
-                        </div>
 
-                        <button
-                          onClick={() => handleSubmitTaskCompletion(task.id)}
-                          disabled={loading}
-                          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg transition-all active:scale-98 disabled:opacity-50"
-                        >
-                          <CheckCircle2 size={16} /> ZGŁOŚ WYKONANIE (DO BRYGADZISTY)
-                        </button>
+                            <div className="space-y-2">
+                              <label className="block text-slate-300 font-semibold">
+                                Zrób / dodaj zdjęcie z wykonania zadania:
+                              </label>
+
+                              <div className="border-2 border-dashed border-slate-800 rounded-xl p-3 text-center bg-slate-900 cursor-pointer hover:border-blue-500 transition-all">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  multiple
+                                  onChange={(e) => handleTaskFileSelect(task.id, e.target.files)}
+                                  className="hidden"
+                                  id={`task-photo-${task.id}`}
+                                />
+                                <label
+                                  htmlFor={`task-photo-${task.id}`}
+                                  className="cursor-pointer flex flex-col items-center gap-1"
+                                >
+                                  <Camera className="text-blue-400" size={22} />
+                                  <span className="text-[11px] text-slate-300 font-semibold">Otwórz aparat / wybierz zdjęcia</span>
+                                </label>
+                              </div>
+
+                              {taskFiles.length > 0 && (
+                                <div className="space-y-1 pt-1">
+                                  {taskFiles.map((f, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="p-2 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between text-[11px] text-slate-300"
+                                    >
+                                      <span className="truncate flex items-center gap-1.5 font-medium">
+                                        <ImageIcon className="text-emerald-400" size={14} /> {f.name}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveTaskFile(task.id, idx)}
+                                        className="p-1 text-slate-400 hover:text-rose-400"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <button
+                              onClick={() => handleSubmitTaskCompletion(task.id)}
+                              disabled={loading}
+                              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg transition-all active:scale-98 disabled:opacity-50"
+                            >
+                              <CheckCircle2 size={16} /> ZGŁOŚ WYKONANIE (DO BRYGADZISTY)
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
