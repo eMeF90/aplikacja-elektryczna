@@ -27,10 +27,10 @@ import {
   FolderOpen,
   ArrowLeft,
   Check,
-  CheckCircle2,
-  XCircle,
-  Eye,
+  Camera,
   HardHat,
+  Clock,
+  ExternalLink,
 } from 'lucide-react'
 
 export default function AdminDashboard() {
@@ -44,6 +44,12 @@ export default function AdminDashboard() {
   const [isProjectDrawerOpen, setIsProjectDrawerOpen] = useState(false)
   const [isAdminDrawerOpen, setIsAdminDrawerOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  // Refy dla plików i aparatu
+  const projectFileInputRef = useRef<HTMLInputElement>(null)
+  const projectCameraInputRef = useRef<HTMLInputElement>(null)
+  const adminFileInputRef = useRef<HTMLInputElement>(null)
+  const adminCameraInputRef = useRef<HTMLInputElement>(null)
 
   // Śledzenie gestu SWIPE na ekranie
   const touchStartX = useRef<number>(0)
@@ -63,11 +69,6 @@ export default function AdminDashboard() {
     logo_url: '',
   })
 
-  const [adminCredentials, setAdminCredentials] = useState({
-    email: 'admin@buildcorp.pl',
-    password: '••••••••••••',
-  })
-
   const [projects, setProjects] = useState<any[]>([])
   const [newsList, setNewsList] = useState<any[]>([])
   const [workers, setWorkers] = useState<any[]>([])
@@ -83,7 +84,7 @@ export default function AdminDashboard() {
   const [showAddNewsModal, setShowAddNewsModal] = useState(false)
 
   // ---------------------------------------------------------------------------
-  // 4. SEKCJA: INWESTYCJE (DOWOLNE FOLDERY I BUDOWY)
+  // 4. SEKCJA: INWESTYCJE
   // ---------------------------------------------------------------------------
   const [projectSearchTerm, setProjectSearchTerm] = useState('')
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
@@ -92,16 +93,17 @@ export default function AdminDashboard() {
   const [showAddProjectModal, setShowAddProjectModal] = useState(false)
   const [newProjTitle, setNewProjTitle] = useState('')
   const [newProjLocation, setNewProjLocation] = useState('')
-  const [newProjBudget, setNewProjBudget] = useState('500000')
+  const [newProjDescription, setNewProjDescription] = useState('')
 
   // Drzewo folderów dla Inwestycji
-  // projectTreeItems format: { [projId]: Array<{ id, name, isFolder, parentId, fileUrl }> }
+  // { [projId]: Array<{ id, name, isFolder, parentId, createdAt, fileUrl }> }
   const [projectTreeItems, setProjectTreeItems] = useState<{ [projId: string]: any[] }>({})
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null) // null = Root
-  const [newItemName, setNewItemName] = useState('')
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [showAddFolderModal, setShowAddFolderModal] = useState(false)
 
   // ---------------------------------------------------------------------------
-  // 5. SEKCJA: ADMINISTRACJA (DOWOLNE KATEGORIE I FOLDERY)
+  // 5. SEKCJA: ADMINISTRACJA
   // ---------------------------------------------------------------------------
   const [adminSearchTerm, setAdminSearchTerm] = useState('')
   const [adminCategories, setAdminCategories] = useState<string[]>(['Umowy i Leasingi', 'Dokumentacja BHP', 'Flota Samochodowa'])
@@ -111,7 +113,8 @@ export default function AdminDashboard() {
 
   const [adminTreeItems, setAdminTreeItems] = useState<{ [catName: string]: any[] }>({})
   const [currentAdminFolderId, setCurrentAdminFolderId] = useState<string | null>(null)
-  const [newAdminItemName, setNewAdminItemName] = useState('')
+  const [newAdminFolderName, setNewAdminFolderName] = useState('')
+  const [showAddAdminFolderModal, setShowAddAdminFolderModal] = useState(false)
 
   // ---------------------------------------------------------------------------
   // 6. SEKCJA: PRACOWNICI
@@ -127,9 +130,7 @@ export default function AdminDashboard() {
   const [selectedOrderModal, setSelectedOrderModal] = useState<any>(null)
   const [orderDeliveryDate, setOrderDeliveryDate] = useState('')
   const [orderDeliveryPlace, setOrderDeliveryPlace] = useState('')
-  const [orderDeliveryRecipient, setOrderDeliveryRecipient] = useState('')
   const [orderDeliveryCarrier, setOrderDeliveryCarrier] = useState('')
-  const [orderDeliveryPhotos, setOrderDeliveryPhotos] = useState<File[]>([])
 
   const [showCreateAdminOrderModal, setShowCreateAdminOrderModal] = useState(false)
   const [adminOrderProjId, setAdminOrderProjId] = useState('')
@@ -141,12 +142,49 @@ export default function AdminDashboard() {
   // ---------------------------------------------------------------------------
   const [previewFile, setPreviewFile] = useState<{ title: string; url: string } | null>(null)
 
-  // Initial Fetch
+  // Initial Fetch & Przywrócenie historii
   useEffect(() => {
     fetchAdminData()
-  }, [])
 
-  // Przesunięcie palcem (Swipe) od lewej krawędzi otwierające menu
+    // BLOKADA PRZYPADKOWEGO WYLOGOWANIA TELEFONEM (PRZYCISK WSTECZ)
+    window.history.pushState(null, '', window.location.href)
+    const handlePopState = (e: PopStateEvent) => {
+      e.preventDefault()
+      window.history.pushState(null, '', window.location.href)
+
+      // Zamknij najpierw modale / szuflady zamiast wyjścia ze strony
+      if (isMainSidebarOpen) setIsMainSidebarOpen(false)
+      else if (isProjectDrawerOpen) setIsProjectDrawerOpen(false)
+      else if (isAdminDrawerOpen) setIsAdminDrawerOpen(false)
+      else if (showAddProjectModal) setShowAddProjectModal(false)
+      else if (showAddFolderModal) setShowAddFolderModal(false)
+      else if (showAddAdminFolderModal) setShowAddAdminFolderModal(false)
+      else if (selectedWorker) setSelectedWorker(null)
+      else if (selectedOrderModal) setSelectedOrderModal(null)
+      else if (previewFile) setPreviewFile(null)
+      else if (currentFolderId) setCurrentFolderId(null)
+      else if (currentAdminFolderId) setCurrentAdminFolderId(null)
+      else if (activeTab !== 'company') setActiveTab('company')
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [
+    isMainSidebarOpen,
+    isProjectDrawerOpen,
+    isAdminDrawerOpen,
+    showAddProjectModal,
+    showAddFolderModal,
+    showAddAdminFolderModal,
+    selectedWorker,
+    selectedOrderModal,
+    previewFile,
+    currentFolderId,
+    currentAdminFolderId,
+    activeTab,
+  ])
+
+  // Przesunięcie palcem (Swipe) od lewej krawędzi
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.targetTouches[0].clientX
     touchEndX.current = e.targetTouches[0].clientX
@@ -172,7 +210,6 @@ export default function AdminDashboard() {
   const fetchAdminData = async () => {
     setLoading(true)
     try {
-      // 1. Ustawienia
       const { data: compData } = await supabase.from('company_settings').select('*').eq('id', 1).maybeSingle()
       if (compData) {
         setCompany({
@@ -187,18 +224,15 @@ export default function AdminDashboard() {
         })
       }
 
-      // 2. Aktualności
       const { data: newsData } = await supabase.from('company_news').select('*').order('created_at', { ascending: false })
       if (newsData) setNewsList(newsData)
 
-      // 3. Budowy
       const { data: projData } = await supabase.from('projects').select('*').order('title', { ascending: true })
       if (projData && projData.length > 0) {
         setProjects(projData)
         if (!selectedProjectId) setSelectedProjectId(projData[0].id)
       }
 
-      // 4. Logi Czasu & Profil Pracowników
       const { data: profData } = await supabase.from('profiles').select('*')
       const { data: logsData } = await supabase.from('time_logs').select('*, projects(title)').order('start_time', { ascending: false })
       if (logsData) setTimeLogs(logsData)
@@ -228,7 +262,6 @@ export default function AdminDashboard() {
         setWorkers(mappedWorkers)
       }
 
-      // 5. Zamówienia
       const { data: ordData } = await supabase.from('material_requests').select('*, projects(title), profiles(full_name)').order('created_at', { ascending: false })
       if (ordData) setOrders(ordData)
     } catch (err: any) {
@@ -257,10 +290,10 @@ export default function AdminDashboard() {
       })
 
       if (!error) {
-        alert('Pomyślnie zaktualizowano dane firmy oraz logo!')
+        alert('Zaktualizowano dane firmy!')
         fetchAdminData()
       } else {
-        alert('Błąd zapisu: ' + error.message)
+        alert('Błąd: ' + error.message)
       }
     } catch (err: any) {
       alert('Błąd: ' + err.message)
@@ -292,67 +325,119 @@ export default function AdminDashboard() {
     }
   }
 
-  // --- INWESTYCJE & OBSŁUGA STRUKTURY FOLDERÓW ---
-  const handleCreateProjectSubmit = async () => {
-    if (!newProjTitle) return
-    setLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('projects')
-        .insert({
-          title: newProjTitle,
-          location: newProjLocation,
-          budget_total: Number(newProjBudget) || 500000,
-          status: 'w_toku',
-        })
-        .select()
-        .single()
+  // --- NAPRAWIONA LOGIKA DODAWANIA BUDOWY ---
+  const handleCreateProjectSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    if (!newProjTitle.trim()) {
+      alert('Wpisz nazwę budowy!')
+      return
+    }
 
-      if (!error && data) {
-        alert('Pomyślnie dodano nową budowę!')
+    setLoading(true)
+
+    try {
+      // Główne zapytanie z opcjonalnymi kolumnami
+      const payload: any = {
+        title: newProjTitle.trim(),
+        location: newProjLocation.trim() || 'Brak lokalizacji',
+        status: 'w_toku',
+      }
+
+      let { data, error } = await supabase.from('projects').insert([payload]).select().single()
+
+      if (error) {
+        console.warn('Wykryto niezgodność schematu, używam zapytania rezerwowego...', error)
+        // Rezerwowe zapytanie minimalne
+        const fallback = await supabase.from('projects').insert([{ title: newProjTitle.trim() }]).select().single()
+        data = fallback.data
+        error = fallback.error
+      }
+
+      if (error) {
+        alert('Błąd tworzenia budowy w bazie: ' + error.message)
+      } else if (data) {
+        alert('Utworzono nową inwestycję!')
+        setProjects((prev) => [...prev, data])
+        setSelectedProjectId(data.id)
         setShowAddProjectModal(false)
         setNewProjTitle('')
         setNewProjLocation('')
-        fetchAdminData()
-        setSelectedProjectId(data.id)
+        setNewProjDescription('')
       }
     } catch (err: any) {
-      alert('Błąd tworzenia budowy: ' + err.message)
+      alert('Nieoczekiwany błąd: ' + err.message)
     } finally {
       setLoading(false)
     }
   }
 
-  const filteredProjects = useMemo(() => {
-    return projects
-      .filter((p) => p.title.toLowerCase().includes(projectSearchTerm.toLowerCase()))
-      .sort((a, b) => a.title.localeCompare(b.title, 'pl'))
-  }, [projects, projectSearchTerm])
+  // --- LOGIKA INWESTYCJI: FOLDERY I PLIKI Z APARATU/DYSKU ---
+  const handleCreateProjectFolder = () => {
+    if (!newFolderName.trim() || !selectedProjectId) return
+    const now = new Date()
+    const formattedDate = now.toLocaleDateString('pl-PL') + ' ' + now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
 
-  const selectedProjectObj = useMemo(() => {
-    return projects.find((p) => p.id === selectedProjectId) || projects[0]
-  }, [projects, selectedProjectId])
-
-  const handleAddProjectTreeItem = (isFolder: boolean) => {
-    if (!newItemName || !selectedProjectId) return
-    const newItem = {
+    const newFolder = {
       id: Date.now().toString(),
-      name: newItemName,
-      isFolder,
+      name: newFolderName.trim(),
+      isFolder: true,
       parentId: currentFolderId,
-      fileUrl: '',
+      createdAt: formattedDate,
     }
 
     setProjectTreeItems((prev) => ({
       ...prev,
-      [selectedProjectId]: [...(prev[selectedProjectId] || []), newItem],
+      [selectedProjectId]: [...(prev[selectedProjectId] || []), newFolder],
     }))
 
-    setNewItemName('')
+    setNewFolderName('')
+    setShowAddFolderModal(false)
+  }
+
+  const handleUploadProjectFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0 || !selectedProjectId) return
+
+    setLoading(true)
+    const file = files[0]
+    const now = new Date()
+    const formattedDate = now.toLocaleDateString('pl-PL') + ' ' + now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
+
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `projects/${selectedProjectId}/${Date.now()}_${Math.random().toString(36).substring(2, 6)}.${fileExt}`
+
+      const { error: uploadErr } = await supabase.storage.from('project-photos').upload(fileName, file)
+      let publicUrl = ''
+
+      if (!uploadErr) {
+        const { data } = supabase.storage.from('project-photos').getPublicUrl(fileName)
+        publicUrl = data?.publicUrl || ''
+      }
+
+      const newFileItem = {
+        id: Date.now().toString(),
+        name: file.name,
+        isFolder: false,
+        parentId: currentFolderId,
+        createdAt: formattedDate,
+        fileUrl: publicUrl,
+      }
+
+      setProjectTreeItems((prev) => ({
+        ...prev,
+        [selectedProjectId]: [...(prev[selectedProjectId] || []), newFileItem],
+      }))
+    } catch (err: any) {
+      alert('Błąd dodawania pliku: ' + err.message)
+    } finally {
+      setLoading(false)
+      e.target.value = ''
+    }
   }
 
   const handleDeleteProjectTreeItem = (itemId: string) => {
-    if (window.confirm('Czy na pewno chcesz usunąć ten element oraz całą jego zawartość?')) {
+    if (window.confirm('Czy na pewno chcesz usunąć ten element?')) {
       setProjectTreeItems((prev) => ({
         ...prev,
         [selectedProjectId]: (prev[selectedProjectId] || []).filter((item) => item.id !== itemId && item.parentId !== itemId),
@@ -366,45 +451,79 @@ export default function AdminDashboard() {
     return allItems.filter((item) => item.parentId === currentFolderId)
   }, [projectTreeItems, selectedProjectId, currentFolderId])
 
-  // --- ADMINISTRACJA & OBSŁUGA STRUKTURY FOLDERÓW ---
-  const filteredAdminCategories = useMemo(() => {
-    return adminCategories.filter((cat) => cat.toLowerCase().includes(adminSearchTerm.toLowerCase()))
-  }, [adminCategories, adminSearchTerm])
+  const filteredProjects = useMemo(() => {
+    return projects
+      .filter((p) => p.title.toLowerCase().includes(projectSearchTerm.toLowerCase()))
+      .sort((a, b) => a.title.localeCompare(b.title, 'pl'))
+  }, [projects, projectSearchTerm])
 
-  const handleAddAdminCategory = () => {
-    if (!newAdminCatTitle) return
-    if (!adminCategories.includes(newAdminCatTitle)) {
-      setAdminCategories((prev) => [...prev, newAdminCatTitle])
-      setSelectedAdminCategory(newAdminCatTitle)
-    }
-    setNewAdminCatTitle('')
-    setShowAddAdminCatModal(false)
-  }
+  const selectedProjectObj = useMemo(() => {
+    return projects.find((p) => p.id === selectedProjectId) || projects[0]
+  }, [projects, selectedProjectId])
 
-  const handleDeleteAdminCategory = (catToDelete: string) => {
-    if (window.confirm(`Czy na pewno chcesz usunąć kategorię "${catToDelete}"?`)) {
-      setAdminCategories((prev) => prev.filter((c) => c !== catToDelete))
-      if (selectedAdminCategory === catToDelete) {
-        setSelectedAdminCategory(adminCategories[0] || '')
-      }
-    }
-  }
+  // --- LOGIKA ADMINISTRACJI: FOLDERY I PLIKI Z APARATU/DYSKU ---
+  const handleCreateAdminFolder = () => {
+    if (!newAdminFolderName.trim() || !selectedAdminCategory) return
+    const now = new Date()
+    const formattedDate = now.toLocaleDateString('pl-PL') + ' ' + now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
 
-  const handleAddAdminTreeItem = (isFolder: boolean) => {
-    if (!newAdminItemName || !selectedAdminCategory) return
-    const newItem = {
+    const newFolder = {
       id: Date.now().toString(),
-      name: newAdminItemName,
-      isFolder,
+      name: newAdminFolderName.trim(),
+      isFolder: true,
       parentId: currentAdminFolderId,
+      createdAt: formattedDate,
     }
 
     setAdminTreeItems((prev) => ({
       ...prev,
-      [selectedAdminCategory]: [...(prev[selectedAdminCategory] || []), newItem],
+      [selectedAdminCategory]: [...(prev[selectedAdminCategory] || []), newFolder],
     }))
 
-    setNewAdminItemName('')
+    setNewAdminFolderName('')
+    setShowAddAdminFolderModal(false)
+  }
+
+  const handleUploadAdminFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0 || !selectedAdminCategory) return
+
+    setLoading(true)
+    const file = files[0]
+    const now = new Date()
+    const formattedDate = now.toLocaleDateString('pl-PL') + ' ' + now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
+
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `admin/${selectedAdminCategory}/${Date.now()}_${Math.random().toString(36).substring(2, 6)}.${fileExt}`
+
+      const { error: uploadErr } = await supabase.storage.from('project-photos').upload(fileName, file)
+      let publicUrl = ''
+
+      if (!uploadErr) {
+        const { data } = supabase.storage.from('project-photos').getPublicUrl(fileName)
+        publicUrl = data?.publicUrl || ''
+      }
+
+      const newFileItem = {
+        id: Date.now().toString(),
+        name: file.name,
+        isFolder: false,
+        parentId: currentAdminFolderId,
+        createdAt: formattedDate,
+        fileUrl: publicUrl,
+      }
+
+      setAdminTreeItems((prev) => ({
+        ...prev,
+        [selectedAdminCategory]: [...(prev[selectedAdminCategory] || []), newFileItem],
+      }))
+    } catch (err: any) {
+      alert('Błąd dodawania pliku: ' + err.message)
+    } finally {
+      setLoading(false)
+      e.target.value = ''
+    }
   }
 
   const handleDeleteAdminTreeItem = (itemId: string) => {
@@ -422,6 +541,10 @@ export default function AdminDashboard() {
     return allItems.filter((item) => item.parentId === currentAdminFolderId)
   }, [adminTreeItems, selectedAdminCategory, currentAdminFolderId])
 
+  const filteredAdminCategories = useMemo(() => {
+    return adminCategories.filter((cat) => cat.toLowerCase().includes(adminSearchTerm.toLowerCase()))
+  }, [adminCategories, adminSearchTerm])
+
   // --- PRACOWNICI ---
   const handleSaveWorkerChanges = async () => {
     if (!selectedWorker) return
@@ -437,7 +560,7 @@ export default function AdminDashboard() {
         .eq('id', selectedWorker.id)
 
       if (!error) {
-        alert('Pomyślnie zaktualizowano dane pracownika!')
+        alert('Zaktualizowano dane pracownika!')
         setSelectedWorker(null)
         fetchAdminData()
       }
@@ -469,7 +592,6 @@ export default function AdminDashboard() {
     setSelectedOrderModal(order)
     setOrderDeliveryDate(new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0])
     setOrderDeliveryPlace(order.projects?.title || 'Plac budowy')
-    setOrderDeliveryRecipient(order.profiles?.full_name || 'Brygadzista')
     setOrderDeliveryCarrier('Hurtownia Budowlana Express')
   }
 
@@ -484,7 +606,6 @@ export default function AdminDashboard() {
           delivery_details: {
             date: orderDeliveryDate,
             place: orderDeliveryPlace,
-            recipient: orderDeliveryRecipient,
             carrier: orderDeliveryCarrier,
           },
         })
@@ -532,11 +653,6 @@ export default function AdminDashboard() {
     router.push('/login')
   }
 
-  // Kalkulacje budżetu dla Zakładki 1
-  const projectsValuation = useMemo(() => projects.filter((p) => p.status === 'w_trakcie_wyceny' || p.status === 'pending'), [projects])
-  const projectsInProgress = useMemo(() => projects.filter((p) => p.status === 'w_toku' || p.status === 'in_progress' || !p.status), [projects])
-  const projectsCompleted = useMemo(() => projects.filter((p) => p.status === 'zakonczone' || p.status === 'completed'), [projects])
-
   return (
     <div
       onTouchStart={handleTouchStart}
@@ -545,7 +661,7 @@ export default function AdminDashboard() {
       style={{ overscrollBehaviorX: 'none', touchAction: 'pan-y' }}
       className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col relative overflow-x-hidden select-none"
     >
-      {/* Pasek wspierający gest Swipe na mobilkach przy lewej krawędzi */}
+      {/* Pasek wspierający gest Swipe przy lewej krawędzi */}
       <div
         onClick={() => setIsMainSidebarOpen(true)}
         className="fixed top-0 left-0 bottom-0 w-3 z-40 bg-amber-500/20 hover:bg-amber-500/50 transition-all cursor-pointer"
@@ -556,9 +672,15 @@ export default function AdminDashboard() {
         <div onClick={() => setIsMainSidebarOpen(false)} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 transition-opacity" />
       )}
 
-      {/* ===================================================================
-          GŁÓWNY PASEK BOCZNY NAVIGACJI (MENU APLIKACJI)
-         =================================================================== */}
+      {/* HIDDEN FILE/CAMERA INPUTS - INWESTYCJE */}
+      <input type="file" ref={projectFileInputRef} onChange={handleUploadProjectFile} className="hidden" />
+      <input type="file" accept="image/*" capture="environment" ref={projectCameraInputRef} onChange={handleUploadProjectFile} className="hidden" />
+
+      {/* HIDDEN FILE/CAMERA INPUTS - ADMINISTRACJA */}
+      <input type="file" ref={adminFileInputRef} onChange={handleUploadAdminFile} className="hidden" />
+      <input type="file" accept="image/*" capture="environment" ref={adminCameraInputRef} onChange={handleUploadAdminFile} className="hidden" />
+
+      {/* GŁÓWNY PASEK BOCZNY NAVIGACJI */}
       <aside
         className={`fixed md:static inset-y-0 left-0 w-72 bg-slate-900 border-r border-slate-800 z-50 p-4 flex flex-col justify-between transform transition-transform duration-300 ease-in-out ${
           isMainSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
@@ -600,7 +722,7 @@ export default function AdminDashboard() {
             >
               <div className="flex items-center gap-2.5">
                 <Building2 size={16} />
-                <span>1. {company.name.substring(0, 15)}...</span>
+                <span>1. Firma</span>
               </div>
             </button>
 
@@ -682,7 +804,7 @@ export default function AdminDashboard() {
             }`}
           >
             <Settings size={16} />
-            <span>6. USTAWIENIA</span>
+            <span>6. Ustawienia</span>
           </button>
 
           <button
@@ -695,9 +817,7 @@ export default function AdminDashboard() {
         </div>
       </aside>
 
-      {/* ===================================================================
-          OBSZAR TREŚCI GŁÓWNEJ APLIKACJI
-         =================================================================== */}
+      {/* OBSZAR TREŚCI GŁÓWNEJ */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-950">
         <header className="bg-slate-900 border-b border-slate-800 p-3.5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -738,9 +858,7 @@ export default function AdminDashboard() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
-          {/* ===================================================================
-              TAB 1: FIRMA (Z AKTUALNOŚCIAMI I STATYSTYKAMI)
-             =================================================================== */}
+          {/* TAB 1: FIRMA */}
           {activeTab === 'company' && (
             <div className="space-y-5">
               <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -757,7 +875,6 @@ export default function AdminDashboard() {
                 </button>
               </div>
 
-              {/* SEKCJA: AKTUALNOŚCI */}
               <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4 shadow-lg">
                 <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                   <h3 className="font-bold text-xs text-white flex items-center gap-2">
@@ -787,53 +904,15 @@ export default function AdminDashboard() {
                   </div>
                 )}
               </div>
-
-              {/* STATYSTYKI BUDÓW */}
-              <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4 shadow-lg">
-                <h3 className="font-bold text-xs text-white flex items-center gap-2 border-b border-slate-800 pb-3">
-                  <BarChart2 className="text-blue-400" size={16} /> Statystyki Budów i Budżetu
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                    <span className="text-xs font-bold text-amber-400 uppercase">W trakcie wyceny ({projectsValuation.length})</span>
-                    {projectsValuation.map((p) => (
-                      <div key={p.id} className="p-2.5 bg-slate-900 rounded-lg text-xs space-y-1">
-                        <h5 className="font-bold text-white truncate">{p.title}</h5>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                    <span className="text-xs font-bold text-emerald-400 uppercase">W toku ({projectsInProgress.length})</span>
-                    {projectsInProgress.map((p) => (
-                      <div key={p.id} className="p-2.5 bg-slate-900 rounded-lg text-xs space-y-1">
-                        <h5 className="font-bold text-white truncate">{p.title}</h5>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                    <span className="text-xs font-bold text-blue-400 uppercase">Zakończone ({projectsCompleted.length})</span>
-                    {projectsCompleted.map((p) => (
-                      <div key={p.id} className="p-2.5 bg-slate-900 rounded-lg text-xs space-y-1">
-                        <h5 className="font-bold text-white truncate">{p.title}</h5>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
-          {/* ===================================================================
-              TAB 2: INWESTYCJE (PEŁNA OBSŁUGA STRUKTURY DRZEWA FOLDERÓW)
-             =================================================================== */}
+          {/* TAB 2: INWESTYCJE */}
           {activeTab === 'inwestycje' && (
             <div className="space-y-5">
               {selectedProjectObj && (
                 <div className="space-y-4">
-                  {/* NAGŁÓWEK BUDOWY Z WYCENTROWANĄ NAZWĄ I ZAKŁADKAMI */}
+                  {/* NAGŁÓWEK BUDOWY */}
                   <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl text-center space-y-3">
                     <div>
                       <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest block">WYBRANA INWESTYCJA</span>
@@ -849,7 +928,7 @@ export default function AdminDashboard() {
                             inwestycjeSubTab === 'valuations' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400'
                           }`}
                         >
-                          1. Wyceny i kosztorysy
+                          1. Wyceny
                         </button>
                         <button
                           onClick={() => setInwestycjeSubTab('docs')}
@@ -871,15 +950,15 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* PEŁNY MENEDŻER PODFOLDERÓW I PLIKÓW */}
+                  {/* ZARZĄDZANIE FOLDERAMI I PLIKAMI Z APARATU / DYSKU */}
                   <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 shadow-lg">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-800 pb-3">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-3">
                       <div className="flex items-center gap-2">
                         {currentFolderId && (
                           <button
                             onClick={() => setCurrentFolderId(null)}
                             className="p-1.5 bg-slate-800 text-amber-400 rounded-lg hover:bg-slate-700"
-                            title="Wróć do folderu głównego"
+                            title="Wróć do katalogu głównego"
                           >
                             <ArrowLeft size={16} />
                           </button>
@@ -889,28 +968,33 @@ export default function AdminDashboard() {
                         </span>
                       </div>
 
-                      <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                        <input
-                          type="text"
-                          placeholder="Nazwa elementu..."
-                          value={newItemName}
-                          onChange={(e) => setNewItemName(e.target.value)}
-                          className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none"
-                        />
-                        <div className="flex gap-1">
-                          <button onClick={() => handleAddProjectTreeItem(true)} className="px-3 py-1.5 bg-slate-800 text-amber-300 font-bold rounded-xl text-xs">
-                            + Folder
-                          </button>
-                          <button onClick={() => handleAddProjectTreeItem(false)} className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs">
-                            + Plik
-                          </button>
-                        </div>
+                      {/* PRZYCISKI TWORZENIA FOLDERU I PLIKÓW/APARATU */}
+                      <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                        <button
+                          onClick={() => setShowAddFolderModal(true)}
+                          className="px-3 py-1.5 bg-slate-800 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1"
+                        >
+                          <FolderPlus size={15} /> + Dodaj Folder
+                        </button>
+                        <button
+                          onClick={() => projectFileInputRef.current?.click()}
+                          className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1"
+                        >
+                          <Upload size={15} /> 📁 Pliki / Dysk
+                        </button>
+                        <button
+                          onClick={() => projectCameraInputRef.current?.click()}
+                          className="px-3 py-1.5 bg-blue-600 text-white font-bold rounded-xl text-xs flex items-center gap-1"
+                        >
+                          <Camera size={15} /> 📷 Aparat
+                        </button>
                       </div>
                     </div>
 
+                    {/* LISTA ELEMENTÓW W AKTUALNYM KATALOGU */}
                     <div className="space-y-2">
                       {currentProjectFolderItems.length === 0 ? (
-                        <p className="text-xs text-slate-500 text-center py-6">Katalog jest pusty. Dodaj pierwszy element powyżej.</p>
+                        <p className="text-xs text-slate-500 text-center py-6">Katalog jest pusty. Użyj przycisków powyżej, aby dodać folder lub pliki.</p>
                       ) : (
                         currentProjectFolderItems.map((item) => (
                           <div
@@ -918,28 +1002,36 @@ export default function AdminDashboard() {
                             className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-200 hover:border-slate-700 transition-all"
                           >
                             {item.isFolder ? (
-                              <button
+                              <div
                                 onClick={() => setCurrentFolderId(item.id)}
-                                className="flex items-center gap-2 font-bold text-amber-300 hover:underline"
+                                className="flex items-center gap-2.5 font-bold text-amber-300 hover:underline cursor-pointer"
                               >
-                                <Folder className="text-amber-400" size={18} /> {item.name} (Otwórz)
-                              </button>
+                                <Folder className="text-amber-400 shrink-0" size={18} />
+                                <div>
+                                  <p className="text-white font-bold">{item.name}</p>
+                                  <p className="text-[10px] text-slate-500 font-mono font-normal">Utworzono: {item.createdAt}</p>
+                                </div>
+                              </div>
                             ) : (
-                              <span className="flex items-center gap-2 font-medium">
-                                <File className="text-blue-400" size={18} /> {item.name}
-                              </span>
+                              <div className="flex items-center gap-2.5 font-medium">
+                                <File className="text-blue-400 shrink-0" size={18} />
+                                <div>
+                                  <p className="text-slate-200 font-semibold">{item.name}</p>
+                                  <p className="text-[10px] text-slate-500 font-mono">Dodano: {item.createdAt}</p>
+                                </div>
+                              </div>
                             )}
 
                             <div className="flex items-center gap-2">
                               {item.fileUrl && (
                                 <button
                                   onClick={() => setPreviewFile({ title: item.name, url: item.fileUrl })}
-                                  className="text-amber-400 font-semibold hover:underline text-[11px]"
+                                  className="p-1.5 bg-slate-800 text-amber-400 font-semibold rounded-lg text-[11px]"
                                 >
-                                  Podgląd
+                                  <Eye size={14} />
                                 </button>
                               )}
-                              <button onClick={() => handleDeleteProjectTreeItem(item.id)} className="p-1 text-slate-500 hover:text-rose-400">
+                              <button onClick={() => handleDeleteProjectTreeItem(item.id)} className="p-1.5 text-slate-500 hover:text-rose-400">
                                 <Trash2 size={15} />
                               </button>
                             </div>
@@ -953,13 +1045,11 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* ===================================================================
-              TAB 3: ADMINISTRACJA (PEŁNY MENEDŻER KATEGORII I PODFOLDERÓW)
-             =================================================================== */}
+          {/* TAB 3: ADMINISTRACJA */}
           {activeTab === 'admin_office' && (
             <div className="space-y-4">
               <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 shadow-lg">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-800 pb-3">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-3">
                   <div className="flex items-center gap-2">
                     {currentAdminFolderId && (
                       <button onClick={() => setCurrentAdminFolderId(null)} className="p-1.5 bg-slate-800 text-amber-400 rounded-lg">
@@ -971,40 +1061,56 @@ export default function AdminDashboard() {
                     </h3>
                   </div>
 
-                  <div className="flex gap-2 w-full sm:w-auto">
-                    <input
-                      type="text"
-                      placeholder="Nazwa elementu..."
-                      value={newAdminItemName}
-                      onChange={(e) => setNewAdminItemName(e.target.value)}
-                      className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white"
-                    />
-                    <button onClick={() => handleAddAdminTreeItem(true)} className="px-3 py-1.5 bg-slate-800 text-amber-300 font-bold rounded-xl text-xs">
-                      + Folder
+                  <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                    <button
+                      onClick={() => setShowAddAdminFolderModal(true)}
+                      className="px-3 py-1.5 bg-slate-800 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1"
+                    >
+                      <FolderPlus size={15} /> + Dodaj Folder
                     </button>
-                    <button onClick={() => handleAddAdminTreeItem(false)} className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs">
-                      + Plik
+                    <button
+                      onClick={() => adminFileInputRef.current?.click()}
+                      className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1"
+                    >
+                      <Upload size={15} /> 📁 Pliki / Dysk
+                    </button>
+                    <button
+                      onClick={() => adminCameraInputRef.current?.click()}
+                      className="px-3 py-1.5 bg-blue-600 text-white font-bold rounded-xl text-xs flex items-center gap-1"
+                    >
+                      <Camera size={15} /> 📷 Aparat
                     </button>
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   {currentAdminFolderItems.length === 0 ? (
-                    <p className="text-xs text-slate-500 text-center py-6">Katalog jest pusty.</p>
+                    <p className="text-xs text-slate-500 text-center py-6">Katalog administracyjny jest pusty.</p>
                   ) : (
                     currentAdminFolderItems.map((item) => (
                       <div key={item.id} className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-200">
                         {item.isFolder ? (
-                          <button onClick={() => setCurrentAdminFolderId(item.id)} className="flex items-center gap-2 font-bold text-amber-300 hover:underline">
-                            <Folder className="text-amber-400" size={18} /> {item.name} (Otwórz)
-                          </button>
+                          <div
+                            onClick={() => setCurrentAdminFolderId(item.id)}
+                            className="flex items-center gap-2.5 font-bold text-amber-300 hover:underline cursor-pointer"
+                          >
+                            <Folder className="text-amber-400 shrink-0" size={18} />
+                            <div>
+                              <p className="text-white font-bold">{item.name}</p>
+                              <p className="text-[10px] text-slate-500 font-mono font-normal">Utworzono: {item.createdAt}</p>
+                            </div>
+                          </div>
                         ) : (
-                          <span className="flex items-center gap-2 font-semibold">
-                            <File className="text-blue-400" size={18} /> {item.name}
-                          </span>
+                          <div className="flex items-center gap-2.5 font-semibold">
+                            <File className="text-blue-400 shrink-0" size={18} />
+                            <div>
+                              <p className="text-slate-200 font-semibold">{item.name}</p>
+                              <p className="text-[10px] text-slate-500 font-mono">Dodano: {item.createdAt}</p>
+                            </div>
+                          </div>
                         )}
 
-                        <button onClick={() => handleDeleteAdminTreeItem(item.id)} className="p-1 text-slate-500 hover:text-rose-400">
+                        <button onClick={() => handleDeleteAdminTreeItem(item.id)} className="p-1.5 text-slate-500 hover:text-rose-400">
                           <Trash2 size={15} />
                         </button>
                       </div>
@@ -1015,9 +1121,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* ===================================================================
-              TAB 4: PRACOWNICI (ZARZĄDZANIE KADRAMI, STAWKI, L4 & URLOPY)
-             =================================================================== */}
+          {/* TAB 4: PRACOWNICI */}
           {activeTab === 'workers' && (
             <div className="space-y-5">
               {leaveRequests.filter((l) => l.status === 'pending').length > 0 && (
@@ -1083,9 +1187,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* ===================================================================
-              TAB 5: ZAMÓWIENIA MATERIAŁÓW
-             =================================================================== */}
+          {/* TAB 5: ZAMÓWIENIA */}
           {activeTab === 'orders' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
@@ -1123,12 +1225,6 @@ export default function AdminDashboard() {
                         >
                           Zatwierdź & Dostawa
                         </button>
-                        <button
-                          onClick={() => {}}
-                          className="flex-1 py-2 bg-rose-600 text-white font-bold rounded-xl text-xs shadow-md"
-                        >
-                          Odrzuć
-                        </button>
                       </div>
                     )}
                   </div>
@@ -1137,9 +1233,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* ===================================================================
-              TAB 6: USTAWIENIA SYSTEMOWE
-             =================================================================== */}
+          {/* TAB 6: USTAWIENIA */}
           {activeTab === 'settings' && (
             <form onSubmit={handleSaveCompanySettings} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 max-w-xl">
               <h3 className="font-bold text-xs text-white border-b border-slate-800 pb-3">Ustawienia Nazwy Firmy, Logo i Admina</h3>
@@ -1180,10 +1274,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* ===================================================================
-          SZUFLADY (DRAWERS) - WYSZKUKIWARKI & WYBÓR
-         =================================================================== */}
-      {/* DRAWER WYBORU INWESTYCJI Z DODAWANIEM BUDOWY */}
+      {/* SZUFLADA WYBORU INWESTYCJI Z DODAWANIEM BUDOWY */}
       {isProjectDrawerOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-start">
           <div className="w-full max-w-xs bg-slate-900 border-r border-slate-800 h-full p-4 flex flex-col justify-between space-y-4">
@@ -1236,7 +1327,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* DRAWER WYBORU KATEGORII ADMINISTRACJI */}
+      {/* SZUFLADA WYBORU KATEGORII ADMINISTRACJI */}
       {isAdminDrawerOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-start">
           <div className="w-full max-w-xs bg-slate-900 border-r border-slate-800 h-full p-4 flex flex-col justify-between space-y-4">
@@ -1247,13 +1338,6 @@ export default function AdminDashboard() {
                   <X size={18} />
                 </button>
               </div>
-
-              <button
-                onClick={() => setShowAddAdminCatModal(true)}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md"
-              >
-                <Plus size={16} /> Dodaj Kategorię
-              </button>
 
               <div className="flex-1 overflow-y-auto space-y-1.5">
                 {filteredAdminCategories.map((cat) => (
@@ -1278,10 +1362,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* ===================================================================
-          MODALE APLIKACJI
-         =================================================================== */}
-      {/* MODAL: DODAJ BUDOWĘ */}
+      {/* MODAL: DODAWANIE BUDOWY */}
       {showAddProjectModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4">
@@ -1292,27 +1373,91 @@ export default function AdminDashboard() {
               </button>
             </div>
             <div className="space-y-3 text-xs">
-              <input
-                type="text"
-                placeholder="Nazwa Inwestycji..."
-                value={newProjTitle}
-                onChange={(e) => setNewProjTitle(e.target.value)}
-                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white"
-              />
-              <input
-                type="text"
-                placeholder="Lokalizacja..."
-                value={newProjLocation}
-                onChange={(e) => setNewProjLocation(e.target.value)}
-                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white"
-              />
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Nazwa Inwestycji / Budowy *</label>
+                <input
+                  type="text"
+                  placeholder="np. Osiedle Słoneczne Etap 2"
+                  value={newProjTitle}
+                  onChange={(e) => setNewProjTitle(e.target.value)}
+                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:border-amber-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Lokalizacja</label>
+                <input
+                  type="text"
+                  placeholder="np. Warszawa, ul. Prosta 12"
+                  value={newProjLocation}
+                  onChange={(e) => setNewProjLocation(e.target.value)}
+                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:border-amber-500 focus:outline-none"
+                />
+              </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-2">
               <button onClick={() => setShowAddProjectModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 font-semibold rounded-xl text-xs">
                 Anuluj
               </button>
-              <button onClick={handleCreateProjectSubmit} className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-xl text-xs">
-                Utwórz Budowę
+              <button onClick={() => handleCreateProjectSubmit()} disabled={loading} className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-xl text-xs">
+                {loading ? 'Tworzenie...' : 'Utwórz Budowę'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DODAWANIE FOLDERU W INWESTYCJACH */}
+      {showAddFolderModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-sm text-white">Dodaj Folder Budowy</h4>
+              <button onClick={() => setShowAddFolderModal(false)} className="text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="Nazwa folderu..."
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowAddFolderModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs">
+                Anuluj
+              </button>
+              <button onClick={handleCreateProjectFolder} className="flex-1 py-2.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs">
+                Utwórz Folder
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DODAWANIE FOLDERU W ADMINISTRACJI */}
+      {showAddAdminFolderModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-sm text-white">Dodaj Folder Administracyjny</h4>
+              <button onClick={() => setShowAddAdminFolderModal(false)} className="text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="Nazwa folderu..."
+              value={newAdminFolderName}
+              onChange={(e) => setNewAdminFolderName(e.target.value)}
+              className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowAddAdminFolderModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs">
+                Anuluj
+              </button>
+              <button onClick={handleCreateAdminFolder} className="flex-1 py-2.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs">
+                Utwórz Folder
               </button>
             </div>
           </div>
@@ -1336,7 +1481,7 @@ export default function AdminDashboard() {
                   type="number"
                   value={editingWorkerRate}
                   onChange={(e) => setEditingWorkerRate(e.target.value)}
-                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono"
                 />
               </div>
               <div>
@@ -1345,7 +1490,7 @@ export default function AdminDashboard() {
                   type="number"
                   value={editingWorkerAllowance}
                   onChange={(e) => setEditingWorkerAllowance(e.target.value)}
-                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono"
                 />
               </div>
               <div>
