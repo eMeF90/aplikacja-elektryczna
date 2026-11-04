@@ -29,15 +29,16 @@ import {
   Check,
   Camera,
   HardHat,
-  Clock,
-  ExternalLink,
+  FileUp,
+  Image,
+  Eye,
 } from 'lucide-react'
 
 export default function AdminDashboard() {
   const router = useRouter()
 
   // ---------------------------------------------------------------------------
-  // 1. GŁÓWNE STANY NAWIGACJI I SZUFLAD
+  // 1. STANY NAWIGACJI I SZUFLAD
   // ---------------------------------------------------------------------------
   const [activeTab, setActiveTab] = useState<'company' | 'inwestycje' | 'admin_office' | 'workers' | 'orders' | 'settings'>('company')
   const [isMainSidebarOpen, setIsMainSidebarOpen] = useState(false)
@@ -45,18 +46,18 @@ export default function AdminDashboard() {
   const [isAdminDrawerOpen, setIsAdminDrawerOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  // Refy dla plików i aparatu
+  // Ukryte inputy dla aparatu i eksploratora plików
   const projectFileInputRef = useRef<HTMLInputElement>(null)
   const projectCameraInputRef = useRef<HTMLInputElement>(null)
   const adminFileInputRef = useRef<HTMLInputElement>(null)
   const adminCameraInputRef = useRef<HTMLInputElement>(null)
 
-  // Śledzenie gestu SWIPE na ekranie
+  // Gest Swipe
   const touchStartX = useRef<number>(0)
   const touchEndX = useRef<number>(0)
 
   // ---------------------------------------------------------------------------
-  // 2. STANY DANYCH Z SUPABASE
+  // 2. DANE Z SUPABASE
   // ---------------------------------------------------------------------------
   const [company, setCompany] = useState({
     name: 'BUILD-CORP CONSTRUCTIONS Sp. z o.o.',
@@ -74,17 +75,16 @@ export default function AdminDashboard() {
   const [workers, setWorkers] = useState<any[]>([])
   const [leaveRequests, setLeaveRequests] = useState<any[]>([])
   const [orders, setOrders] = useState<any[]>([])
-  const [timeLogs, setTimeLogs] = useState<any[]>([])
 
   // ---------------------------------------------------------------------------
-  // 3. SEKCJA: FIRMA (AKTUALNOŚCI)
+  // 3. FIRMA & AKTUALNOŚCI
   // ---------------------------------------------------------------------------
   const [newNewsTitle, setNewNewsTitle] = useState('')
   const [newNewsContent, setNewNewsContent] = useState('')
   const [showAddNewsModal, setShowAddNewsModal] = useState(false)
 
   // ---------------------------------------------------------------------------
-  // 4. SEKCJA: INWESTYCJE
+  // 4. INWESTYCJE
   // ---------------------------------------------------------------------------
   const [projectSearchTerm, setProjectSearchTerm] = useState('')
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
@@ -93,17 +93,16 @@ export default function AdminDashboard() {
   const [showAddProjectModal, setShowAddProjectModal] = useState(false)
   const [newProjTitle, setNewProjTitle] = useState('')
   const [newProjLocation, setNewProjLocation] = useState('')
-  const [newProjDescription, setNewProjDescription] = useState('')
 
-  // Drzewo folderów dla Inwestycji
-  // { [projId]: Array<{ id, name, isFolder, parentId, createdAt, fileUrl }> }
+  // Menedżer folderów i plików w Inwestycjach
   const [projectTreeItems, setProjectTreeItems] = useState<{ [projId: string]: any[] }>({})
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
-  const [newFolderName, setNewFolderName] = useState('')
   const [showAddFolderModal, setShowAddFolderModal] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [showFileChoiceModal, setShowFileChoiceModal] = useState(false)
 
   // ---------------------------------------------------------------------------
-  // 5. SEKCJA: ADMINISTRACJA
+  // 5. ADMINISTRACJA
   // ---------------------------------------------------------------------------
   const [adminSearchTerm, setAdminSearchTerm] = useState('')
   const [adminCategories, setAdminCategories] = useState<string[]>(['Umowy i Leasingi', 'Dokumentacja BHP', 'Flota Samochodowa'])
@@ -113,11 +112,12 @@ export default function AdminDashboard() {
 
   const [adminTreeItems, setAdminTreeItems] = useState<{ [catName: string]: any[] }>({})
   const [currentAdminFolderId, setCurrentAdminFolderId] = useState<string | null>(null)
-  const [newAdminFolderName, setNewAdminFolderName] = useState('')
   const [showAddAdminFolderModal, setShowAddAdminFolderModal] = useState(false)
+  const [newAdminFolderName, setNewAdminFolderName] = useState('')
+  const [showAdminFileChoiceModal, setShowAdminFileChoiceModal] = useState(false)
 
   // ---------------------------------------------------------------------------
-  // 6. SEKCJA: PRACOWNICI
+  // 6. PRACOWNICI
   // ---------------------------------------------------------------------------
   const [selectedWorker, setSelectedWorker] = useState<any>(null)
   const [editingWorkerRate, setEditingWorkerRate] = useState('')
@@ -125,7 +125,7 @@ export default function AdminDashboard() {
   const [editingWorkerPhone, setEditingWorkerPhone] = useState('')
 
   // ---------------------------------------------------------------------------
-  // 7. SEKCJA: ZAMÓWIENIA
+  // 7. ZAMÓWIENIA
   // ---------------------------------------------------------------------------
   const [selectedOrderModal, setSelectedOrderModal] = useState<any>(null)
   const [orderDeliveryDate, setOrderDeliveryDate] = useState('')
@@ -142,26 +142,34 @@ export default function AdminDashboard() {
   // ---------------------------------------------------------------------------
   const [previewFile, setPreviewFile] = useState<{ title: string; url: string } | null>(null)
 
-  // Initial Fetch & Przywrócenie historii
+  // ---------------------------------------------------------------------------
+  // EFFECT: ŁADOWANIE DANYCH ORAZ BLOKADA PRZYPADKOWEGO COFANIA DO LOGOWANIA
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     fetchAdminData()
 
-    // BLOKADA PRZYPADKOWEGO WYLOGOWANIA TELEFONEM (PRZYCISK WSTECZ)
+    // Blokada wyjścia do ekranu logowania przy użyciu przycisku "Wstecz" na telefonie
     window.history.pushState(null, '', window.location.href)
+
     const handlePopState = (e: PopStateEvent) => {
       e.preventDefault()
       window.history.pushState(null, '', window.location.href)
 
-      // Zamknij najpierw modale / szuflady zamiast wyjścia ze strony
-      if (isMainSidebarOpen) setIsMainSidebarOpen(false)
-      else if (isProjectDrawerOpen) setIsProjectDrawerOpen(false)
-      else if (isAdminDrawerOpen) setIsAdminDrawerOpen(false)
-      else if (showAddProjectModal) setShowAddProjectModal(false)
+      // Zamiast wylogowania, zamykamy otwarte okna w kolejności priorytetu
+      if (showAddProjectModal) setShowAddProjectModal(false)
       else if (showAddFolderModal) setShowAddFolderModal(false)
+      else if (showFileChoiceModal) setShowFileChoiceModal(false)
+      else if (showAddAdminCatModal) setShowAddAdminCatModal(false)
       else if (showAddAdminFolderModal) setShowAddAdminFolderModal(false)
+      else if (showAdminFileChoiceModal) setShowAdminFileChoiceModal(false)
+      else if (showAddNewsModal) setShowAddNewsModal(false)
       else if (selectedWorker) setSelectedWorker(null)
       else if (selectedOrderModal) setSelectedOrderModal(null)
+      else if (showCreateAdminOrderModal) setShowCreateAdminOrderModal(false)
       else if (previewFile) setPreviewFile(null)
+      else if (isMainSidebarOpen) setIsMainSidebarOpen(false)
+      else if (isProjectDrawerOpen) setIsProjectDrawerOpen(false)
+      else if (isAdminDrawerOpen) setIsAdminDrawerOpen(false)
       else if (currentFolderId) setCurrentFolderId(null)
       else if (currentAdminFolderId) setCurrentAdminFolderId(null)
       else if (activeTab !== 'company') setActiveTab('company')
@@ -170,21 +178,26 @@ export default function AdminDashboard() {
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [
+    showAddProjectModal,
+    showAddFolderModal,
+    showFileChoiceModal,
+    showAddAdminCatModal,
+    showAddAdminFolderModal,
+    showAdminFileChoiceModal,
+    showAddNewsModal,
+    selectedWorker,
+    selectedOrderModal,
+    showCreateAdminOrderModal,
+    previewFile,
     isMainSidebarOpen,
     isProjectDrawerOpen,
     isAdminDrawerOpen,
-    showAddProjectModal,
-    showAddFolderModal,
-    showAddAdminFolderModal,
-    selectedWorker,
-    selectedOrderModal,
-    previewFile,
     currentFolderId,
     currentAdminFolderId,
     activeTab,
   ])
 
-  // Przesunięcie palcem (Swipe) od lewej krawędzi
+  // Obsługa gestu SWIPE
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.targetTouches[0].clientX
     touchEndX.current = e.targetTouches[0].clientX
@@ -234,44 +247,21 @@ export default function AdminDashboard() {
       }
 
       const { data: profData } = await supabase.from('profiles').select('*')
-      const { data: logsData } = await supabase.from('time_logs').select('*, projects(title)').order('start_time', { ascending: false })
-      if (logsData) setTimeLogs(logsData)
-
       const { data: vacData } = await supabase.from('vacation_requests').select('*, profiles(full_name)').order('created_at', { ascending: false })
       if (vacData) setLeaveRequests(vacData)
 
-      const todayStr = new Date().toISOString().split('T')[0]
-
-      if (profData) {
-        const mappedWorkers = profData.map((worker) => {
-          const openLog = logsData?.find((l) => l.user_id === worker.id && !l.end_time)
-          const activeVacation = vacData?.find((v) => {
-            return v.user_id === worker.id && v.status === 'approved' && todayStr >= v.start_date && todayStr <= v.end_date
-          })
-
-          let status: 'working' | 'absent' | 'l4' | 'vacation' = 'absent'
-          if (openLog) status = 'working'
-          else if (activeVacation) status = activeVacation.type === 'L4' ? 'l4' : 'vacation'
-
-          return {
-            ...worker,
-            status,
-            activeLog: openLog || null,
-          }
-        })
-        setWorkers(mappedWorkers)
-      }
+      if (profData) setWorkers(profData)
 
       const { data: ordData } = await supabase.from('material_requests').select('*, projects(title), profiles(full_name)').order('created_at', { ascending: false })
       if (ordData) setOrders(ordData)
     } catch (err: any) {
-      console.error('Błąd pobierania danych administratora:', err)
+      console.error('Błąd pobierania danych:', err)
     } finally {
       setLoading(false)
     }
   }
 
-  // --- ZAPIS USTAWIEŃ FIRMY ---
+  // --- USTAWIENIA FIRMY ---
   const handleSaveCompanySettings = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -325,55 +315,58 @@ export default function AdminDashboard() {
     }
   }
 
-  // --- NAPRAWIONA LOGIKA DODAWANIA BUDOWY ---
-  const handleCreateProjectSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault()
+  // --- NAPRAWIONE DODAWANIE BUDOWY ---
+  const handleCreateProjectSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     if (!newProjTitle.trim()) {
-      alert('Wpisz nazwę budowy!')
+      alert('Proszę podać nazwę budowy!')
       return
     }
 
     setLoading(true)
 
     try {
-      // Główne zapytanie z opcjonalnymi kolumnami
-      const payload: any = {
+      const payload = {
         title: newProjTitle.trim(),
-        location: newProjLocation.trim() || 'Brak lokalizacji',
+        location: newProjLocation.trim() || 'Plac Budowy',
         status: 'w_toku',
       }
 
-      let { data, error } = await supabase.from('projects').insert([payload]).select().single()
+      const { data, error } = await supabase.from('projects').insert([payload]).select().single()
 
       if (error) {
-        console.warn('Wykryto niezgodność schematu, używam zapytania rezerwowego...', error)
-        // Rezerwowe zapytanie minimalne
+        // Próba zapisu awaryjnego (tylko wymagane pola)
         const fallback = await supabase.from('projects').insert([{ title: newProjTitle.trim() }]).select().single()
-        data = fallback.data
-        error = fallback.error
-      }
-
-      if (error) {
-        alert('Błąd tworzenia budowy w bazie: ' + error.message)
+        if (fallback.data) {
+          alert('Dodano nową inwestycję!')
+          setProjects((prev) => [...prev, fallback.data])
+          setSelectedProjectId(fallback.data.id)
+          setShowAddProjectModal(false)
+          setNewProjTitle('')
+          setNewProjLocation('')
+        } else {
+          alert('Błąd dodawania budowy: ' + error.message)
+        }
       } else if (data) {
-        alert('Utworzono nową inwestycję!')
+        alert('Dodano nową inwestycję!')
         setProjects((prev) => [...prev, data])
         setSelectedProjectId(data.id)
         setShowAddProjectModal(false)
         setNewProjTitle('')
         setNewProjLocation('')
-        setNewProjDescription('')
       }
     } catch (err: any) {
-      alert('Nieoczekiwany błąd: ' + err.message)
+      alert('Błąd: ' + err.message)
     } finally {
       setLoading(false)
     }
   }
 
-  // --- LOGIKA INWESTYCJI: FOLDERY I PLIKI Z APARATU/DYSKU ---
-  const handleCreateProjectFolder = () => {
+  // --- INWESTYCJE: FOLDERY I PLIKI ---
+  const handleCreateProjectFolderSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
     if (!newFolderName.trim() || !selectedProjectId) return
+
     const now = new Date()
     const formattedDate = now.toLocaleDateString('pl-PL') + ' ' + now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
 
@@ -399,6 +392,7 @@ export default function AdminDashboard() {
     if (!files || files.length === 0 || !selectedProjectId) return
 
     setLoading(true)
+    setShowFileChoiceModal(false)
     const file = files[0]
     const now = new Date()
     const formattedDate = now.toLocaleDateString('pl-PL') + ' ' + now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
@@ -429,7 +423,7 @@ export default function AdminDashboard() {
         [selectedProjectId]: [...(prev[selectedProjectId] || []), newFileItem],
       }))
     } catch (err: any) {
-      alert('Błąd dodawania pliku: ' + err.message)
+      alert('Błąd wgrywania pliku: ' + err.message)
     } finally {
       setLoading(false)
       e.target.value = ''
@@ -461,9 +455,23 @@ export default function AdminDashboard() {
     return projects.find((p) => p.id === selectedProjectId) || projects[0]
   }, [projects, selectedProjectId])
 
-  // --- LOGIKA ADMINISTRACJI: FOLDERY I PLIKI Z APARATU/DYSKU ---
-  const handleCreateAdminFolder = () => {
+  // --- ADMINISTRACJA: KATEGORIE, FOLDERY I PLIKI ---
+  const handleCreateAdminCategorySubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newAdminCatTitle.trim()) return
+
+    if (!adminCategories.includes(newAdminCatTitle.trim())) {
+      setAdminCategories((prev) => [...prev, newAdminCatTitle.trim()])
+      setSelectedAdminCategory(newAdminCatTitle.trim())
+    }
+    setNewAdminCatTitle('')
+    setShowAddAdminCatModal(false)
+  }
+
+  const handleCreateAdminFolderSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
     if (!newAdminFolderName.trim() || !selectedAdminCategory) return
+
     const now = new Date()
     const formattedDate = now.toLocaleDateString('pl-PL') + ' ' + now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
 
@@ -489,6 +497,7 @@ export default function AdminDashboard() {
     if (!files || files.length === 0 || !selectedAdminCategory) return
 
     setLoading(true)
+    setShowAdminFileChoiceModal(false)
     const file = files[0]
     const now = new Date()
     const formattedDate = now.toLocaleDateString('pl-PL') + ' ' + now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
@@ -519,7 +528,7 @@ export default function AdminDashboard() {
         [selectedAdminCategory]: [...(prev[selectedAdminCategory] || []), newFileItem],
       }))
     } catch (err: any) {
-      alert('Błąd dodawania pliku: ' + err.message)
+      alert('Błąd wgrywania pliku: ' + err.message)
     } finally {
       setLoading(false)
       e.target.value = ''
@@ -661,7 +670,7 @@ export default function AdminDashboard() {
       style={{ overscrollBehaviorX: 'none', touchAction: 'pan-y' }}
       className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col relative overflow-x-hidden select-none"
     >
-      {/* Pasek wspierający gest Swipe przy lewej krawędzi */}
+      {/* Pasek gestu Swipe przy lewej krawędzi */}
       <div
         onClick={() => setIsMainSidebarOpen(true)}
         className="fixed top-0 left-0 bottom-0 w-3 z-40 bg-amber-500/20 hover:bg-amber-500/50 transition-all cursor-pointer"
@@ -672,11 +681,11 @@ export default function AdminDashboard() {
         <div onClick={() => setIsMainSidebarOpen(false)} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 transition-opacity" />
       )}
 
-      {/* HIDDEN FILE/CAMERA INPUTS - INWESTYCJE */}
+      {/* UKRYTE INPUTY DLA APARATU I PLIKÓW - INWESTYCJE */}
       <input type="file" ref={projectFileInputRef} onChange={handleUploadProjectFile} className="hidden" />
       <input type="file" accept="image/*" capture="environment" ref={projectCameraInputRef} onChange={handleUploadProjectFile} className="hidden" />
 
-      {/* HIDDEN FILE/CAMERA INPUTS - ADMINISTRACJA */}
+      {/* UKRYTE INPUTY DLA APARATU I PLIKÓW - ADMINISTRACJA */}
       <input type="file" ref={adminFileInputRef} onChange={handleUploadAdminFile} className="hidden" />
       <input type="file" accept="image/*" capture="environment" ref={adminCameraInputRef} onChange={handleUploadAdminFile} className="hidden" />
 
@@ -912,7 +921,6 @@ export default function AdminDashboard() {
             <div className="space-y-5">
               {selectedProjectObj && (
                 <div className="space-y-4">
-                  {/* NAGŁÓWEK BUDOWY */}
                   <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl text-center space-y-3">
                     <div>
                       <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest block">WYBRANA INWESTYCJA</span>
@@ -950,7 +958,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* ZARZĄDZANIE FOLDERAMI I PLIKAMI Z APARATU / DYSKU */}
+                  {/* PRZYCISKI AKCJI I LISTA ELEMENTÓW */}
                   <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 shadow-lg">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-3">
                       <div className="flex items-center gap-2">
@@ -968,33 +976,28 @@ export default function AdminDashboard() {
                         </span>
                       </div>
 
-                      {/* PRZYCISKI TWORZENIA FOLDERU I PLIKÓW/APARATU */}
+                      {/* BEZPOŚREDNIE PRZYCISKI AKCJI */}
                       <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                         <button
                           onClick={() => setShowAddFolderModal(true)}
-                          className="px-3 py-1.5 bg-slate-800 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1"
+                          className="px-3.5 py-2 bg-slate-800 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-slate-700 hover:bg-slate-750"
                         >
-                          <FolderPlus size={15} /> + Dodaj Folder
+                          <FolderPlus size={16} /> + Dodaj Folder
                         </button>
+
                         <button
-                          onClick={() => projectFileInputRef.current?.click()}
-                          className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1"
+                          onClick={() => setShowFileChoiceModal(true)}
+                          className="px-3.5 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md hover:bg-amber-400"
                         >
-                          <Upload size={15} /> 📁 Pliki / Dysk
-                        </button>
-                        <button
-                          onClick={() => projectCameraInputRef.current?.click()}
-                          className="px-3 py-1.5 bg-blue-600 text-white font-bold rounded-xl text-xs flex items-center gap-1"
-                        >
-                          <Camera size={15} /> 📷 Aparat
+                          <Plus size={16} /> + Dodaj Plik
                         </button>
                       </div>
                     </div>
 
-                    {/* LISTA ELEMENTÓW W AKTUALNYM KATALOGU */}
+                    {/* LISTA ELEMENTÓW */}
                     <div className="space-y-2">
                       {currentProjectFolderItems.length === 0 ? (
-                        <p className="text-xs text-slate-500 text-center py-6">Katalog jest pusty. Użyj przycisków powyżej, aby dodać folder lub pliki.</p>
+                        <p className="text-xs text-slate-500 text-center py-6">Katalog jest pusty. Użyj przycisków powyżej, aby dodać folder lub plik.</p>
                       ) : (
                         currentProjectFolderItems.map((item) => (
                           <div
@@ -1064,28 +1067,23 @@ export default function AdminDashboard() {
                   <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                     <button
                       onClick={() => setShowAddAdminFolderModal(true)}
-                      className="px-3 py-1.5 bg-slate-800 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1"
+                      className="px-3.5 py-2 bg-slate-800 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-slate-700"
                     >
-                      <FolderPlus size={15} /> + Dodaj Folder
+                      <FolderPlus size={16} /> + Dodaj Folder
                     </button>
+
                     <button
-                      onClick={() => adminFileInputRef.current?.click()}
-                      className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1"
+                      onClick={() => setShowAdminFileChoiceModal(true)}
+                      className="px-3.5 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md"
                     >
-                      <Upload size={15} /> 📁 Pliki / Dysk
-                    </button>
-                    <button
-                      onClick={() => adminCameraInputRef.current?.click()}
-                      className="px-3 py-1.5 bg-blue-600 text-white font-bold rounded-xl text-xs flex items-center gap-1"
-                    >
-                      <Camera size={15} /> 📷 Aparat
+                      <Plus size={16} /> + Dodaj Plik
                     </button>
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   {currentAdminFolderItems.length === 0 ? (
-                    <p className="text-xs text-slate-500 text-center py-6">Katalog administracyjny jest pusty.</p>
+                    <p className="text-xs text-slate-500 text-center py-6">Katalog jest pusty.</p>
                   ) : (
                     currentAdminFolderItems.map((item) => (
                       <div key={item.id} className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-200">
@@ -1154,34 +1152,26 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="divide-y divide-slate-800">
-                  {workers.map((w) => {
-                    let statusBadge = <span className="text-rose-400">🔴 Nieaktywny</span>
-                    if (w.status === 'working') statusBadge = <span className="text-emerald-400 font-bold">🟢 ZALOGOWANY</span>
-                    else if (w.status === 'l4') statusBadge = <span className="text-blue-400 font-bold">🔵 L4 (Chorobowe)</span>
-                    else if (w.status === 'vacation') statusBadge = <span className="text-slate-400 font-bold">⚪ Urlop (UW)</span>
-
-                    return (
-                      <div
-                        key={w.id}
-                        onClick={() => {
-                          setSelectedWorker(w)
-                          setEditingWorkerRate(w.hourly_rate || '35')
-                          setEditingWorkerAllowance(w.daily_allowance || '0')
-                          setEditingWorkerPhone(w.phone || '')
-                        }}
-                        className="p-4 hover:bg-slate-850 cursor-pointer flex justify-between items-center transition-all"
-                      >
-                        <div>
-                          <h4 className="font-bold text-sm text-white">{w.full_name}</h4>
-                          <p className="text-xs text-slate-400">{w.role === 'foreman' ? 'Brygadzista' : 'Pracownik'}</p>
-                        </div>
-                        <div className="text-right text-xs">
-                          {statusBadge}
-                          <p className="text-[10px] text-slate-500 mt-1 font-mono">{w.hourly_rate || 35} PLN/h</p>
-                        </div>
+                  {workers.map((w) => (
+                    <div
+                      key={w.id}
+                      onClick={() => {
+                        setSelectedWorker(w)
+                        setEditingWorkerRate(w.hourly_rate || '35')
+                        setEditingWorkerAllowance(w.daily_allowance || '0')
+                        setEditingWorkerPhone(w.phone || '')
+                      }}
+                      className="p-4 hover:bg-slate-850 cursor-pointer flex justify-between items-center transition-all"
+                    >
+                      <div>
+                        <h4 className="font-bold text-sm text-white">{w.full_name}</h4>
+                        <p className="text-xs text-slate-400">{w.role === 'foreman' ? 'Brygadzista' : 'Pracownik'}</p>
                       </div>
-                    )
-                  })}
+                      <div className="text-right text-xs">
+                        <span className="text-emerald-400 font-bold">{w.hourly_rate || 35} PLN/h</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -1274,7 +1264,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* SZUFLADA WYBORU INWESTYCJI Z DODAWANIEM BUDOWY */}
+      {/* SZUFLADA WYBORU INWESTYCJI */}
       {isProjectDrawerOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-start">
           <div className="w-full max-w-xs bg-slate-900 border-r border-slate-800 h-full p-4 flex flex-col justify-between space-y-4">
@@ -1339,6 +1329,13 @@ export default function AdminDashboard() {
                 </button>
               </div>
 
+              <button
+                onClick={() => setShowAddAdminCatModal(true)}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md"
+              >
+                <Plus size={16} /> Dodaj Kategorię
+              </button>
+
               <div className="flex-1 overflow-y-auto space-y-1.5">
                 {filteredAdminCategories.map((cat) => (
                   <button
@@ -1365,10 +1362,10 @@ export default function AdminDashboard() {
       {/* MODAL: DODAWANIE BUDOWY */}
       {showAddProjectModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4">
+          <form onSubmit={handleCreateProjectSubmit} className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h4 className="font-bold text-sm text-white">Dodaj Nową Budowę</h4>
-              <button onClick={() => setShowAddProjectModal(false)} className="text-slate-400 hover:text-white">
+              <button type="button" onClick={() => setShowAddProjectModal(false)} className="text-slate-400 hover:text-white">
                 <X size={18} />
               </button>
             </div>
@@ -1377,6 +1374,7 @@ export default function AdminDashboard() {
                 <label className="block text-slate-400 mb-1 font-semibold">Nazwa Inwestycji / Budowy *</label>
                 <input
                   type="text"
+                  required
                   placeholder="np. Osiedle Słoneczne Etap 2"
                   value={newProjTitle}
                   onChange={(e) => setNewProjTitle(e.target.value)}
@@ -1395,71 +1393,174 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div className="flex gap-2 pt-2">
-              <button onClick={() => setShowAddProjectModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 font-semibold rounded-xl text-xs">
+              <button type="button" onClick={() => setShowAddProjectModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 font-semibold rounded-xl text-xs">
                 Anuluj
               </button>
-              <button onClick={() => handleCreateProjectSubmit()} disabled={loading} className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-xl text-xs">
+              <button type="submit" disabled={loading} className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-xl text-xs shadow-md">
                 {loading ? 'Tworzenie...' : 'Utwórz Budowę'}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
       {/* MODAL: DODAWANIE FOLDERU W INWESTYCJACH */}
       {showAddFolderModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <form onSubmit={handleCreateProjectFolderSubmit} className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-sm text-white">Nowy Folder Budowy</h4>
+              <button type="button" onClick={() => setShowAddFolderModal(false)} className="text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <label className="block text-slate-400 mb-1 font-semibold">Nazwa Folderu:</label>
+              <input
+                type="text"
+                required
+                placeholder="np. Kosztorysy_2026..."
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setShowAddFolderModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs">
+                Anuluj
+              </button>
+              <button type="submit" className="flex-1 py-2.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs shadow-md">
+                Utwórz Folder
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: WYBÓR ŹRÓDŁA PLIKU (INWESTYCJE) */}
+      {showFileChoiceModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h4 className="font-bold text-sm text-white">Dodaj Folder Budowy</h4>
-              <button onClick={() => setShowAddFolderModal(false)} className="text-slate-400 hover:text-white">
+              <h4 className="font-bold text-sm text-white">Dodaj Plik / Zdjęcie</h4>
+              <button onClick={() => setShowFileChoiceModal(false)} className="text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 pt-1">
+              <button
+                onClick={() => projectCameraInputRef.current?.click()}
+                className="w-full p-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2.5 shadow-md"
+              >
+                <Camera size={18} /> Zrób Zdjęcie Aparatem
+              </button>
+
+              <button
+                onClick={() => projectFileInputRef.current?.click()}
+                className="w-full p-3.5 bg-slate-800 hover:bg-slate-750 text-amber-300 font-bold rounded-xl text-xs flex items-center justify-center gap-2.5 border border-slate-700"
+              >
+                <Upload size={18} /> Wybierz z Pamięci / Dysku
+              </button>
+            </div>
+
+            <button onClick={() => setShowFileChoiceModal(false)} className="w-full py-2 bg-slate-950 text-slate-400 rounded-xl text-xs mt-2">
+              Anuluj
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DODAWANIE KATEGORII ADMINISTRACJI */}
+      {showAddAdminCatModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <form onSubmit={handleCreateAdminCategorySubmit} className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-sm text-white">Nowa Kategoria Administracji</h4>
+              <button type="button" onClick={() => setShowAddAdminCatModal(false)} className="text-slate-400 hover:text-white">
                 <X size={18} />
               </button>
             </div>
             <input
               type="text"
-              placeholder="Nazwa folderu..."
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
+              required
+              placeholder="Nazwa kategorii..."
+              value={newAdminCatTitle}
+              onChange={(e) => setNewAdminCatTitle(e.target.value)}
               className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white"
             />
             <div className="flex gap-2">
-              <button onClick={() => setShowAddFolderModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs">
+              <button type="button" onClick={() => setShowAddAdminCatModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs">
                 Anuluj
               </button>
-              <button onClick={handleCreateProjectFolder} className="flex-1 py-2.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs">
-                Utwórz Folder
+              <button type="submit" className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-xl text-xs">
+                Dodaj
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
       {/* MODAL: DODAWANIE FOLDERU W ADMINISTRACJI */}
       {showAddAdminFolderModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4">
+          <form onSubmit={handleCreateAdminFolderSubmit} className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h4 className="font-bold text-sm text-white">Dodaj Folder Administracyjny</h4>
-              <button onClick={() => setShowAddAdminFolderModal(false)} className="text-slate-400 hover:text-white">
+              <h4 className="font-bold text-sm text-white">Nowy Folder Administracyjny</h4>
+              <button type="button" onClick={() => setShowAddAdminFolderModal(false)} className="text-slate-400 hover:text-white">
                 <X size={18} />
               </button>
             </div>
             <input
               type="text"
+              required
               placeholder="Nazwa folderu..."
               value={newAdminFolderName}
               onChange={(e) => setNewAdminFolderName(e.target.value)}
               className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white"
             />
             <div className="flex gap-2">
-              <button onClick={() => setShowAddAdminFolderModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs">
+              <button type="button" onClick={() => setShowAddAdminFolderModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs">
                 Anuluj
               </button>
-              <button onClick={handleCreateAdminFolder} className="flex-1 py-2.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs">
-                Utwórz Folder
+              <button type="submit" className="flex-1 py-2.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs">
+                Utwórz
               </button>
             </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: WYBÓR ŹRÓDŁA PLIKU (ADMINISTRACJA) */}
+      {showAdminFileChoiceModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-sm text-white">Dodaj Dokument / Plik</h4>
+              <button onClick={() => setShowAdminFileChoiceModal(false)} className="text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 pt-1">
+              <button
+                onClick={() => adminCameraInputRef.current?.click()}
+                className="w-full p-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2.5 shadow-md"
+              >
+                <Camera size={18} /> Zrób Zdjęcie Aparatem
+              </button>
+
+              <button
+                onClick={() => adminFileInputRef.current?.click()}
+                className="w-full p-3.5 bg-slate-800 hover:bg-slate-750 text-amber-300 font-bold rounded-xl text-xs flex items-center justify-center gap-2.5 border border-slate-700"
+              >
+                <Upload size={18} /> Wybierz z Pamięci / Dysku
+              </button>
+            </div>
+
+            <button onClick={() => setShowAdminFileChoiceModal(false)} className="w-full py-2 bg-slate-950 text-slate-400 rounded-xl text-xs mt-2">
+              Anuluj
+            </button>
           </div>
         </div>
       )}
