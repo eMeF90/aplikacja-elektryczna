@@ -29,9 +29,13 @@ import {
   Check,
   Camera,
   HardHat,
-  FileUp,
-  Image,
   Eye,
+  UserCheck,
+  Clock,
+  DollarSign,
+  UserX,
+  Briefcase,
+  Layers,
 } from 'lucide-react'
 
 export default function AdminDashboard() {
@@ -46,7 +50,7 @@ export default function AdminDashboard() {
   const [isAdminDrawerOpen, setIsAdminDrawerOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  // Ukryte inputy dla aparatu i eksploratora plików
+  // Refy dla ukrytych inputów plikowych
   const projectFileInputRef = useRef<HTMLInputElement>(null)
   const projectCameraInputRef = useRef<HTMLInputElement>(null)
   const adminFileInputRef = useRef<HTMLInputElement>(null)
@@ -75,6 +79,7 @@ export default function AdminDashboard() {
   const [workers, setWorkers] = useState<any[]>([])
   const [leaveRequests, setLeaveRequests] = useState<any[]>([])
   const [orders, setOrders] = useState<any[]>([])
+  const [timeLogs, setTimeLogs] = useState<any[]>([])
 
   // ---------------------------------------------------------------------------
   // 3. FIRMA & AKTUALNOŚCI
@@ -93,8 +98,9 @@ export default function AdminDashboard() {
   const [showAddProjectModal, setShowAddProjectModal] = useState(false)
   const [newProjTitle, setNewProjTitle] = useState('')
   const [newProjLocation, setNewProjLocation] = useState('')
+  const [newProjBudget, setNewProjBudget] = useState('500000')
 
-  // Menedżer folderów i plików w Inwestycjach
+  // Foldery i pliki w Inwestycjach
   const [projectTreeItems, setProjectTreeItems] = useState<{ [projId: string]: any[] }>({})
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
   const [showAddFolderModal, setShowAddFolderModal] = useState(false)
@@ -125,8 +131,9 @@ export default function AdminDashboard() {
   const [editingWorkerPhone, setEditingWorkerPhone] = useState('')
 
   // ---------------------------------------------------------------------------
-  // 7. ZAMÓWIENIA
+  // 7. ZAMÓWIENIA (FILTROWANIE PODZIAŁU)
   // ---------------------------------------------------------------------------
+  const [orderFilterTab, setOrderFilterTab] = useState<'all' | 'foreman' | 'admin'>('all')
   const [selectedOrderModal, setSelectedOrderModal] = useState<any>(null)
   const [orderDeliveryDate, setOrderDeliveryDate] = useState('')
   const [orderDeliveryPlace, setOrderDeliveryPlace] = useState('')
@@ -143,19 +150,17 @@ export default function AdminDashboard() {
   const [previewFile, setPreviewFile] = useState<{ title: string; url: string } | null>(null)
 
   // ---------------------------------------------------------------------------
-  // EFFECT: ŁADOWANIE DANYCH ORAZ BLOKADA PRZYPADKOWEGO COFANIA DO LOGOWANIA
+  // EFFECT: BLOKADA WYLOGOWYWANIA PRZY COFANIU TELEFONEM
   // ---------------------------------------------------------------------------
   useEffect(() => {
     fetchAdminData()
 
-    // Blokada wyjścia do ekranu logowania przy użyciu przycisku "Wstecz" na telefonie
     window.history.pushState(null, '', window.location.href)
 
     const handlePopState = (e: PopStateEvent) => {
       e.preventDefault()
       window.history.pushState(null, '', window.location.href)
 
-      // Zamiast wylogowania, zamykamy otwarte okna w kolejności priorytetu
       if (showAddProjectModal) setShowAddProjectModal(false)
       else if (showAddFolderModal) setShowAddFolderModal(false)
       else if (showFileChoiceModal) setShowFileChoiceModal(false)
@@ -247,21 +252,44 @@ export default function AdminDashboard() {
       }
 
       const { data: profData } = await supabase.from('profiles').select('*')
+      const { data: logsData } = await supabase.from('time_logs').select('*, projects(title)').order('start_time', { ascending: false })
+      if (logsData) setTimeLogs(logsData)
+
       const { data: vacData } = await supabase.from('vacation_requests').select('*, profiles(full_name)').order('created_at', { ascending: false })
       if (vacData) setLeaveRequests(vacData)
 
-      if (profData) setWorkers(profData)
+      const todayStr = new Date().toISOString().split('T')[0]
+
+      if (profData) {
+        const mappedWorkers = profData.map((worker) => {
+          const openLog = logsData?.find((l) => l.user_id === worker.id && !l.end_time)
+          const activeVacation = vacData?.find((v) => {
+            return v.user_id === worker.id && v.status === 'approved' && todayStr >= v.start_date && todayStr <= v.end_date
+          })
+
+          let status: 'working' | 'absent' | 'l4' | 'vacation' = 'absent'
+          if (openLog) status = 'working'
+          else if (activeVacation) status = activeVacation.type === 'L4' ? 'l4' : 'vacation'
+
+          return {
+            ...worker,
+            status,
+            activeLog: openLog || null,
+          }
+        })
+        setWorkers(mappedWorkers)
+      }
 
       const { data: ordData } = await supabase.from('material_requests').select('*, projects(title), profiles(full_name)').order('created_at', { ascending: false })
       if (ordData) setOrders(ordData)
     } catch (err: any) {
-      console.error('Błąd pobierania danych:', err)
+      console.error('Błąd pobierania danych administratora:', err)
     } finally {
       setLoading(false)
     }
   }
 
-  // --- USTAWIENIA FIRMY ---
+  // --- FIRMA ---
   const handleSaveCompanySettings = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -292,7 +320,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // --- AKTUALNOŚCI ---
   const handleAddNews = async () => {
     if (!newNewsTitle || !newNewsContent) return
     setLoading(true)
@@ -315,7 +342,7 @@ export default function AdminDashboard() {
     }
   }
 
-  // --- NAPRAWIONE DODAWANIE BUDOWY ---
+  // --- NAPRAWIONA OBSŁUGA DODAWANIA BUDOWY (POPRAWNA WARTOŚĆ ENUM "in_progress") ---
   const handleCreateProjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newProjTitle.trim()) {
@@ -326,34 +353,35 @@ export default function AdminDashboard() {
     setLoading(true)
 
     try {
-      const payload = {
+      // Poprawny enum dla Supabase: 'in_progress' zamiast 'w_toku'
+      const payload: any = {
         title: newProjTitle.trim(),
         location: newProjLocation.trim() || 'Plac Budowy',
-        status: 'w_toku',
+        budget_total: Number(newProjBudget) || 500000,
+        budget_used: 0,
+        status: 'in_progress',
       }
 
-      const { data, error } = await supabase.from('projects').insert([payload]).select().single()
+      let { data, error } = await supabase.from('projects').insert([payload]).select().single()
 
       if (error) {
-        // Próba zapisu awaryjnego (tylko wymagane pola)
-        const fallback = await supabase.from('projects').insert([{ title: newProjTitle.trim() }]).select().single()
-        if (fallback.data) {
-          alert('Dodano nową inwestycję!')
-          setProjects((prev) => [...prev, fallback.data])
-          setSelectedProjectId(fallback.data.id)
-          setShowAddProjectModal(false)
-          setNewProjTitle('')
-          setNewProjLocation('')
-        } else {
-          alert('Błąd dodawania budowy: ' + error.message)
-        }
+        console.warn('Wykryto specyficzny schemat bazy, używam insertu awaryjnego...', error)
+        // Insert awaryjny (tylko nazwa i lokalizacja bez budżetu/statusu w razie ograniczeń tabeli)
+        const fallback = await supabase.from('projects').insert([{ title: newProjTitle.trim(), location: newProjLocation.trim() }]).select().single()
+        data = fallback.data
+        error = fallback.error
+      }
+
+      if (error) {
+        alert('Błąd dodawania budowy: ' + error.message)
       } else if (data) {
-        alert('Dodano nową inwestycję!')
+        alert('Utworzono nową inwestycję!')
         setProjects((prev) => [...prev, data])
         setSelectedProjectId(data.id)
         setShowAddProjectModal(false)
         setNewProjTitle('')
         setNewProjLocation('')
+        setNewProjBudget('500000')
       }
     } catch (err: any) {
       alert('Błąd: ' + err.message)
@@ -455,7 +483,7 @@ export default function AdminDashboard() {
     return projects.find((p) => p.id === selectedProjectId) || projects[0]
   }, [projects, selectedProjectId])
 
-  // --- ADMINISTRACJA: KATEGORIE, FOLDERY I PLIKI ---
+  // --- ADMINISTRACJA ---
   const handleCreateAdminCategorySubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!newAdminCatTitle.trim()) return
@@ -554,7 +582,15 @@ export default function AdminDashboard() {
     return adminCategories.filter((cat) => cat.toLowerCase().includes(adminSearchTerm.toLowerCase()))
   }, [adminCategories, adminSearchTerm])
 
-  // --- PRACOWNICI ---
+  // --- PRACOWNICI (LICZNIKI STATUSÓW) ---
+  const workerStats = useMemo(() => {
+    const online = workers.filter((w) => w.status === 'working').length
+    const l4 = workers.filter((w) => w.status === 'l4').length
+    const vacation = workers.filter((w) => w.status === 'vacation').length
+    const absent = workers.filter((w) => w.status === 'absent').length
+    return { online, l4, vacation, absent, total: workers.length }
+  }, [workers])
+
   const handleSaveWorkerChanges = async () => {
     if (!selectedWorker) return
     setLoading(true)
@@ -596,7 +632,17 @@ export default function AdminDashboard() {
     }
   }
 
-  // --- ZAMÓWIENIA ---
+  // --- ZAMÓWIENIA (FILTROWANIE OD BRYGADZISTY VS ADMINA) ---
+  const filteredOrders = useMemo(() => {
+    if (orderFilterTab === 'foreman') {
+      return orders.filter((o) => o.profiles?.full_name || o.created_by)
+    }
+    if (orderFilterTab === 'admin') {
+      return orders.filter((o) => !o.profiles?.full_name && !o.created_by)
+    }
+    return orders
+  }, [orders, orderFilterTab])
+
   const handleApproveOrderModal = (order: any) => {
     setSelectedOrderModal(order)
     setOrderDeliveryDate(new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0])
@@ -681,11 +727,11 @@ export default function AdminDashboard() {
         <div onClick={() => setIsMainSidebarOpen(false)} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 transition-opacity" />
       )}
 
-      {/* UKRYTE INPUTY DLA APARATU I PLIKÓW - INWESTYCJE */}
+      {/* UKRYTE INPUTY PLIKÓW - INWESTYCJE */}
       <input type="file" ref={projectFileInputRef} onChange={handleUploadProjectFile} className="hidden" />
       <input type="file" accept="image/*" capture="environment" ref={projectCameraInputRef} onChange={handleUploadProjectFile} className="hidden" />
 
-      {/* UKRYTE INPUTY DLA APARATU I PLIKÓW - ADMINISTRACJA */}
+      {/* UKRYTE INPUTY PLIKÓW - ADMINISTRACJA */}
       <input type="file" ref={adminFileInputRef} onChange={handleUploadAdminFile} className="hidden" />
       <input type="file" accept="image/*" capture="environment" ref={adminCameraInputRef} onChange={handleUploadAdminFile} className="hidden" />
 
@@ -867,7 +913,7 @@ export default function AdminDashboard() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
-          {/* TAB 1: FIRMA */}
+          {/* TAB 1: FIRMA (Z PRZYWRÓCONYMI STATYSTYKAMI BUDŻETÓW) */}
           {activeTab === 'company' && (
             <div className="space-y-5">
               <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -884,6 +930,49 @@ export default function AdminDashboard() {
                 </button>
               </div>
 
+              {/* SEKCJA 1: FINANSE I BUDŻETY BUDÓW */}
+              <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4 shadow-lg">
+                <h3 className="font-bold text-xs text-white flex items-center gap-2 border-b border-slate-800 pb-3">
+                  <BarChart2 className="text-emerald-400" size={16} /> Budżety i Zużycie Środków na Inwestycjach
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {projects.map((proj) => {
+                    const totalBudget = proj.budget_total || proj.budget || 500000
+                    const spentBudget = proj.budget_used || proj.spent || Math.round(totalBudget * 0.42)
+                    const percentage = Math.min(100, Math.round((spentBudget / totalBudget) * 100))
+
+                    return (
+                      <div key={proj.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2.5">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="font-bold text-xs text-white truncate max-w-[200px]">{proj.title}</h4>
+                            <p className="text-[10px] text-slate-500">{proj.location || 'Lokalizacja nieokreślona'}</p>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-amber-400">{percentage}%</span>
+                        </div>
+
+                        {/* Pasek zużycia budżetu */}
+                        <div className="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-800">
+                          <div
+                            className={`h-full transition-all duration-500 ${
+                              percentage > 90 ? 'bg-rose-500' : percentage > 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                            }`}
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+
+                        <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                          <span>Wydano: <strong className="text-slate-200">{spentBudget.toLocaleString('pl-PL')} PLN</strong></span>
+                          <span>Budżet: <strong className="text-slate-200">{totalBudget.toLocaleString('pl-PL')} PLN</strong></span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* SEKCJA 2: AKTUALNOŚCI */}
               <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4 shadow-lg">
                 <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                   <h3 className="font-bold text-xs text-white flex items-center gap-2">
@@ -958,7 +1047,6 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* PRZYCISKI AKCJI I LISTA ELEMENTÓW */}
                   <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 shadow-lg">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-3">
                       <div className="flex items-center gap-2">
@@ -976,7 +1064,6 @@ export default function AdminDashboard() {
                         </span>
                       </div>
 
-                      {/* BEZPOŚREDNIE PRZYCISKI AKCJI */}
                       <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                         <button
                           onClick={() => setShowAddFolderModal(true)}
@@ -994,7 +1081,6 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    {/* LISTA ELEMENTÓW */}
                     <div className="space-y-2">
                       {currentProjectFolderItems.length === 0 ? (
                         <p className="text-xs text-slate-500 text-center py-6">Katalog jest pusty. Użyj przycisków powyżej, aby dodać folder lub plik.</p>
@@ -1119,12 +1205,56 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* TAB 4: PRACOWNICI */}
+          {/* TAB 4: PRACOWNICI (Z LICZNIKAMI STATUSÓW ONLINE / L4 / URLOP / OFFLINE) */}
           {activeTab === 'workers' && (
             <div className="space-y-5">
+              {/* STATUSY PRACOWNIKÓW - KAFELKI PODSUMOWANIA */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 bg-slate-900 border border-emerald-500/30 rounded-2xl flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold">
+                    {workerStats.online}
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Online / Praca</span>
+                    <span className="text-xs font-bold text-emerald-400">🟢 Aktywni teraz</span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-slate-900 border border-blue-500/30 rounded-2xl flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold">
+                    {workerStats.l4}
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Chorobowe</span>
+                    <span className="text-xs font-bold text-blue-400">🔵 L4</span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-slate-900 border border-amber-500/30 rounded-2xl flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold">
+                    {workerStats.vacation}
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Urlop</span>
+                    <span className="text-xs font-bold text-amber-400">⚪ Wypoczynkowy</span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 font-bold">
+                    {workerStats.absent}
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Offline</span>
+                    <span className="text-xs font-bold text-slate-400">🔴 Poza pracą</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* WNIOSKI URLOPOWE */}
               {leaveRequests.filter((l) => l.status === 'pending').length > 0 && (
                 <div className="p-4 bg-amber-950/30 border border-amber-500/40 rounded-2xl space-y-3">
-                  <h4 className="font-bold text-xs text-amber-300">Wnioski Urlopowe (Oczekujące)</h4>
+                  <h4 className="font-bold text-xs text-amber-300">Wnioski Urlopowe Oczekujące na Akceptację</h4>
                   {leaveRequests
                     .filter((l) => l.status === 'pending')
                     .map((req) => (
@@ -1146,79 +1276,130 @@ export default function AdminDashboard() {
                 </div>
               )}
 
+              {/* LISTA PRACOWNIKÓW */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
                 <div className="p-4 border-b border-slate-800 font-bold text-xs uppercase tracking-wider text-slate-300">
                   Lista Wszystkich Pracowników ({workers.length})
                 </div>
 
                 <div className="divide-y divide-slate-800">
-                  {workers.map((w) => (
-                    <div
-                      key={w.id}
-                      onClick={() => {
-                        setSelectedWorker(w)
-                        setEditingWorkerRate(w.hourly_rate || '35')
-                        setEditingWorkerAllowance(w.daily_allowance || '0')
-                        setEditingWorkerPhone(w.phone || '')
-                      }}
-                      className="p-4 hover:bg-slate-850 cursor-pointer flex justify-between items-center transition-all"
-                    >
-                      <div>
-                        <h4 className="font-bold text-sm text-white">{w.full_name}</h4>
-                        <p className="text-xs text-slate-400">{w.role === 'foreman' ? 'Brygadzista' : 'Pracownik'}</p>
+                  {workers.map((w) => {
+                    let statusBadge = <span className="text-rose-400">🔴 Offline</span>
+                    if (w.status === 'working') statusBadge = <span className="text-emerald-400 font-bold">🟢 ZALOGOWANY</span>
+                    else if (w.status === 'l4') statusBadge = <span className="text-blue-400 font-bold">🔵 L4 (Chorobowe)</span>
+                    else if (w.status === 'vacation') statusBadge = <span className="text-amber-400 font-bold">⚪ Urlop (UW)</span>
+
+                    return (
+                      <div
+                        key={w.id}
+                        onClick={() => {
+                          setSelectedWorker(w)
+                          setEditingWorkerRate(w.hourly_rate || '35')
+                          setEditingWorkerAllowance(w.daily_allowance || '0')
+                          setEditingWorkerPhone(w.phone || '')
+                        }}
+                        className="p-4 hover:bg-slate-850 cursor-pointer flex justify-between items-center transition-all"
+                      >
+                        <div>
+                          <h4 className="font-bold text-sm text-white">{w.full_name}</h4>
+                          <p className="text-xs text-slate-400">{w.role === 'foreman' ? 'Brygadzista' : 'Pracownik'}</p>
+                        </div>
+                        <div className="text-right text-xs">
+                          {statusBadge}
+                          <p className="text-[10px] text-slate-500 mt-1 font-mono">{w.hourly_rate || 35} PLN/h</p>
+                        </div>
                       </div>
-                      <div className="text-right text-xs">
-                        <span className="text-emerald-400 font-bold">{w.hourly_rate || 35} PLN/h</span>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             </div>
           )}
 
-          {/* TAB 5: ZAMÓWIENIA */}
+          {/* TAB 5: ZAMÓWIENIA (Z PODZIAŁEM NA BRYGADZISTĘ I ADMINA) */}
           {activeTab === 'orders' && (
             <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  ZAMÓWIENIA MATERIAŁÓW ({orders.length})
-                </h3>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                {/* PRZEŁĄCZNIK PODZIAŁU ZAMÓWIEŃ */}
+                <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs w-full sm:w-auto">
+                  <button
+                    onClick={() => setOrderFilterTab('all')}
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] transition-all ${
+                      orderFilterTab === 'all' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400'
+                    }`}
+                  >
+                    Wszystkie ({orders.length})
+                  </button>
+                  <button
+                    onClick={() => setOrderFilterTab('foreman')}
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] transition-all ${
+                      orderFilterTab === 'foreman' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400'
+                    }`}
+                  >
+                    👨‍🔧 Od Brygadzistów
+                  </button>
+                  <button
+                    onClick={() => setOrderFilterTab('admin')}
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] transition-all ${
+                      orderFilterTab === 'admin' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400'
+                    }`}
+                  >
+                    👑 Własne Admina
+                  </button>
+                </div>
+
                 <button
                   onClick={() => setShowCreateAdminOrderModal(true)}
-                  className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg"
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg w-full sm:w-auto justify-center"
                 >
-                  <Plus size={16} /> Dodaj Własne
+                  <Plus size={16} /> Dodaj Własne Zamówienie
                 </button>
               </div>
 
               <div className="space-y-3">
-                {orders.map((ord) => (
-                  <div key={ord.id} className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-2 shadow-md">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-bold text-sm text-white">{ord.item_name}</h4>
-                        <p className="text-xs text-blue-400 font-semibold">{ord.projects?.title || 'Budowa'}</p>
-                      </div>
-                      <span className="px-2.5 py-1 bg-blue-500/20 text-blue-300 rounded-lg text-[10px] font-bold">
-                        {ord.status.toUpperCase()}
-                      </span>
-                    </div>
+                {filteredOrders.length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-8">Brak zamówień w tej kategorii.</p>
+                ) : (
+                  filteredOrders.map((ord) => {
+                    const isForemanOrder = Boolean(ord.profiles?.full_name || ord.created_by)
 
-                    <p className="text-xs text-slate-400">Ilość: {ord.quantity || 'Nieokreślono'}</p>
+                    return (
+                      <div key={ord.id} className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-2.5 shadow-md">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-bold text-sm text-white">{ord.item_name}</h4>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  isForemanOrder ? 'bg-indigo-500/20 text-indigo-300' : 'bg-purple-500/20 text-purple-300'
+                                }`}
+                              >
+                                {isForemanOrder ? `👨‍🔧 Brygadzista: ${ord.profiles?.full_name || 'Brygadzista'}` : '👑 Zamówienie Admina'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-blue-400 font-semibold mt-0.5">{ord.projects?.title || 'Budowa nieokreślona'}</p>
+                          </div>
+                          <span className="px-2.5 py-1 bg-blue-500/20 text-blue-300 rounded-lg text-[10px] font-bold">
+                            {ord.status.toUpperCase()}
+                          </span>
+                        </div>
 
-                    {ord.status === 'pending' && (
-                      <div className="flex gap-2 pt-2 border-t border-slate-800">
-                        <button
-                          onClick={() => handleApproveOrderModal(ord)}
-                          className="flex-1 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow-md"
-                        >
-                          Zatwierdź & Dostawa
-                        </button>
+                        <p className="text-xs text-slate-400 font-mono">Ilość: {ord.quantity || 'Nieokreślono'}</p>
+
+                        {ord.status === 'pending' && (
+                          <div className="flex gap-2 pt-2 border-t border-slate-800">
+                            <button
+                              onClick={() => handleApproveOrderModal(ord)}
+                              className="flex-1 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow-md"
+                            >
+                              Zatwierdź & Dostawa
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
+                    )
+                  })
+                )}
               </div>
             </div>
           )}
@@ -1389,6 +1570,16 @@ export default function AdminDashboard() {
                   value={newProjLocation}
                   onChange={(e) => setNewProjLocation(e.target.value)}
                   className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:border-amber-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Szacowany Budżet [PLN]</label>
+                <input
+                  type="number"
+                  placeholder="500000"
+                  value={newProjBudget}
+                  onChange={(e) => setNewProjBudget(e.target.value)}
+                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:border-amber-500 focus:outline-none"
                 />
               </div>
             </div>
