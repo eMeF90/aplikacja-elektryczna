@@ -30,6 +30,12 @@ import {
   Camera,
   HardHat,
   Eye,
+  UserCheck,
+  Clock,
+  DollarSign,
+  UserX,
+  Briefcase,
+  Layers,
 } from 'lucide-react'
 
 export default function AdminDashboard() {
@@ -125,7 +131,7 @@ export default function AdminDashboard() {
   const [editingWorkerPhone, setEditingWorkerPhone] = useState('')
 
   // ---------------------------------------------------------------------------
-  // 7. ZAMÓWIENIA
+  // 7. ZAMÓWIENIA (FILTROWANIE PODZIAŁU)
   // ---------------------------------------------------------------------------
   const [orderFilterTab, setOrderFilterTab] = useState<'all' | 'foreman' | 'admin'>('all')
   const [selectedOrderModal, setSelectedOrderModal] = useState<any>(null)
@@ -336,7 +342,7 @@ export default function AdminDashboard() {
     }
   }
 
-  // --- DODAWANIE BUDOWY (Z WSPÓŁRZĘDNYMI LATITUDE/LONGITUDE) ---
+  // --- NAPRAWIONA OBSŁUGA DODAWANIA BUDOWY (POPRAWNA WARTOŚĆ ENUM "in_progress") ---
   const handleCreateProjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newProjTitle.trim()) {
@@ -347,34 +353,21 @@ export default function AdminDashboard() {
     setLoading(true)
 
     try {
-      // Pełny payload wraz z latitude i longitude zapobiegający błędowi bazy NOT NULL[cite: 4]
+      // Poprawny enum dla Supabase: 'in_progress' zamiast 'w_toku'
       const payload: any = {
         title: newProjTitle.trim(),
         location: newProjLocation.trim() || 'Plac Budowy',
-        address: newProjLocation.trim() || 'Plac Budowy',
         budget_total: Number(newProjBudget) || 500000,
         budget_used: 0,
         status: 'in_progress',
-        latitude: 52.2297,
-        longitude: 21.0122,
       }
 
       let { data, error } = await supabase.from('projects').insert([payload]).select().single()
 
       if (error) {
-        console.warn('Pierwsza próba nie powiodła się, używam awaryjnego zlecenia insert ze współrzędnymi...', error)
-        const fallback = await supabase
-          .from('projects')
-          .insert([
-            {
-              title: newProjTitle.trim(),
-              location: newProjLocation.trim() || 'Plac Budowy',
-              latitude: 52.2297,
-              longitude: 21.0122,
-            },
-          ])
-          .select()
-          .single()
+        console.warn('Wykryto specyficzny schemat bazy, używam insertu awaryjnego...', error)
+        // Insert awaryjny (tylko nazwa i lokalizacja bez budżetu/statusu w razie ograniczeń tabeli)
+        const fallback = await supabase.from('projects').insert([{ title: newProjTitle.trim(), location: newProjLocation.trim() }]).select().single()
         data = fallback.data
         error = fallback.error
       }
@@ -589,7 +582,7 @@ export default function AdminDashboard() {
     return adminCategories.filter((cat) => cat.toLowerCase().includes(adminSearchTerm.toLowerCase()))
   }, [adminCategories, adminSearchTerm])
 
-  // --- PRACOWNICI ---
+  // --- PRACOWNICI (LICZNIKI STATUSÓW) ---
   const workerStats = useMemo(() => {
     const online = workers.filter((w) => w.status === 'working').length
     const l4 = workers.filter((w) => w.status === 'l4').length
@@ -639,7 +632,7 @@ export default function AdminDashboard() {
     }
   }
 
-  // --- ZAMÓWIENIA ---
+  // --- ZAMÓWIENIA (FILTROWANIE OD BRYGADZISTY VS ADMINA) ---
   const filteredOrders = useMemo(() => {
     if (orderFilterTab === 'foreman') {
       return orders.filter((o) => o.profiles?.full_name || o.created_by)
@@ -721,17 +714,17 @@ export default function AdminDashboard() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       style={{ overscrollBehaviorX: 'none', touchAction: 'pan-y' }}
-      className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row relative overflow-x-hidden select-none"
+      className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col relative overflow-x-hidden select-none"
     >
-      {/* Pasek gestu Swipe dla telefonów */}
+      {/* Pasek gestu Swipe przy lewej krawędzi */}
       <div
         onClick={() => setIsMainSidebarOpen(true)}
-        className="fixed top-0 left-0 bottom-0 w-3 z-40 bg-amber-500/20 hover:bg-amber-500/50 transition-all cursor-pointer md:hidden"
+        className="fixed top-0 left-0 bottom-0 w-3 z-40 bg-amber-500/20 hover:bg-amber-500/50 transition-all cursor-pointer"
         title="Przesuń w prawo, aby otworzyć menu główne"
       />
 
       {isMainSidebarOpen && (
-        <div onClick={() => setIsMainSidebarOpen(false)} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 transition-opacity md:hidden" />
+        <div onClick={() => setIsMainSidebarOpen(false)} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 transition-opacity" />
       )}
 
       {/* UKRYTE INPUTY PLIKÓW - INWESTYCJE */}
@@ -742,9 +735,9 @@ export default function AdminDashboard() {
       <input type="file" ref={adminFileInputRef} onChange={handleUploadAdminFile} className="hidden" />
       <input type="file" accept="image/*" capture="environment" ref={adminCameraInputRef} onChange={handleUploadAdminFile} className="hidden" />
 
-      {/* GŁÓWNY PASEK BOCZNY NAVIGACJI (AUTO-DOPASOWANY DLA TELEFONÓW I KOMPUTERA) */}
+      {/* GŁÓWNY PASEK BOCZNY NAVIGACJI */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 w-72 md:w-64 lg:w-72 bg-slate-900 border-r border-slate-800 z-50 p-4 flex flex-col justify-between transform transition-transform duration-300 ease-in-out shrink-0 ${
+        className={`fixed md:static inset-y-0 left-0 w-72 bg-slate-900 border-r border-slate-800 z-50 p-4 flex flex-col justify-between transform transition-transform duration-300 ease-in-out ${
           isMainSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
@@ -879,18 +872,18 @@ export default function AdminDashboard() {
         </div>
       </aside>
 
-      {/* OBSZAR TREŚCI GŁÓWNEJ - WYŚRODKOWANY I DOPASOWANY NA KOMPUTERZE */}
+      {/* OBSZAR TREŚCI GŁÓWNEJ */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-950">
-        <header className="bg-slate-900 border-b border-slate-800 p-3.5 md:px-8 flex items-center justify-between shrink-0">
+        <header className="bg-slate-900 border-b border-slate-800 p-3.5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsMainSidebarOpen(true)}
-              className="md:hidden p-2 bg-slate-800 text-amber-400 rounded-xl border border-slate-700 flex items-center gap-1.5 text-xs font-bold"
+              className="p-2 bg-slate-800 text-amber-400 rounded-xl border border-slate-700 flex items-center gap-1.5 text-xs font-bold"
             >
               <Menu size={16} /> Menu
             </button>
 
-            <h2 className="text-xs md:text-sm font-bold text-white truncate max-w-[180px] sm:max-w-none">
+            <h2 className="text-xs font-bold text-white truncate max-w-[180px] sm:max-w-none">
               {activeTab === 'company' && company.name}
               {activeTab === 'inwestycje' && (selectedProjectObj?.title || 'INWESTYCJE')}
               {activeTab === 'admin_office' && selectedAdminCategory}
@@ -903,7 +896,7 @@ export default function AdminDashboard() {
           {activeTab === 'inwestycje' && (
             <button
               onClick={() => setIsProjectDrawerOpen(true)}
-              className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs shadow-md hover:bg-amber-400 transition-all"
+              className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs shadow-md"
             >
               Zmień Budowę
             </button>
@@ -912,56 +905,54 @@ export default function AdminDashboard() {
           {activeTab === 'admin_office' && (
             <button
               onClick={() => setIsAdminDrawerOpen(true)}
-              className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs shadow-md hover:bg-amber-400 transition-all"
+              className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs shadow-md"
             >
               Zmień Kategorię
             </button>
           )}
         </header>
 
-        {/* KONTENER GŁÓWNY: MAX-W-7XL NA KOMPUTERACH */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 max-w-7xl mx-auto w-full">
-          {/* TAB 1: FIRMA */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          {/* TAB 1: FIRMA (Z PRZYWRÓCONYMI STATYSTYKAMI BUDŻETÓW) */}
           {activeTab === 'company' && (
-            <div className="space-y-6">
-              <div className="bg-slate-900 p-5 md:p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="space-y-5">
+              <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
                   <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">PROFIL FIRMY</span>
-                  <h1 className="text-xl md:text-2xl font-black text-white">{company.name}</h1>
-                  <p className="text-xs text-slate-400 mt-1">{company.address}</p>
+                  <h1 className="text-xl font-black text-white">{company.name}</h1>
+                  <p className="text-xs text-slate-400 mt-0.5">{company.address}</p>
                 </div>
                 <button
                   onClick={() => setActiveTab('settings')}
-                  className="px-4 py-2.5 bg-slate-800 border border-slate-700 text-amber-400 text-xs font-semibold rounded-xl flex items-center gap-2 hover:bg-slate-750 transition-all"
+                  className="px-3 py-2 bg-slate-800 border border-slate-700 text-amber-400 text-xs font-semibold rounded-xl flex items-center gap-1.5"
                 >
-                  <Edit3 size={15} /> Edytuj Dane Firmy
+                  <Edit3 size={14} /> Edytuj
                 </button>
               </div>
 
-              {/* FINANSE I BUDŻETY - 2 KOLUMNY NA DUŻYCH EKRANACH */}
-              <div className="bg-slate-900 p-5 md:p-6 rounded-2xl border border-slate-800 space-y-4 shadow-lg">
+              {/* SEKCJA 1: FINANSE I BUDŻETY BUDÓW */}
+              <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4 shadow-lg">
                 <h3 className="font-bold text-xs text-white flex items-center gap-2 border-b border-slate-800 pb-3">
                   <BarChart2 className="text-emerald-400" size={16} /> Budżety i Zużycie Środków na Inwestycjach
                 </h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {projects.map((proj) => {
                     const totalBudget = proj.budget_total || proj.budget || 500000
                     const spentBudget = proj.budget_used || proj.spent || Math.round(totalBudget * 0.42)
                     const percentage = Math.min(100, Math.round((spentBudget / totalBudget) * 100))
 
                     return (
-                      <div key={proj.id} className="bg-slate-950 p-4 md:p-5 rounded-xl border border-slate-800 space-y-3">
+                      <div key={proj.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2.5">
                         <div className="flex justify-between items-start">
                           <div>
-                            <h4 className="font-bold text-xs md:text-sm text-white truncate max-w-[220px] sm:max-w-none">{proj.title}</h4>
+                            <h4 className="font-bold text-xs text-white truncate max-w-[200px]">{proj.title}</h4>
                             <p className="text-[10px] text-slate-500">{proj.location || 'Lokalizacja nieokreślona'}</p>
                           </div>
-                          <span className="text-xs font-bold font-mono text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
-                            {percentage}%
-                          </span>
+                          <span className="text-xs font-bold font-mono text-amber-400">{percentage}%</span>
                         </div>
 
+                        {/* Pasek zużycia budżetu */}
                         <div className="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-800">
                           <div
                             className={`h-full transition-all duration-500 ${
@@ -971,7 +962,7 @@ export default function AdminDashboard() {
                           />
                         </div>
 
-                        <div className="flex justify-between text-[11px] text-slate-400 font-mono">
+                        <div className="flex justify-between text-[10px] text-slate-400 font-mono">
                           <span>Wydano: <strong className="text-slate-200">{spentBudget.toLocaleString('pl-PL')} PLN</strong></span>
                           <span>Budżet: <strong className="text-slate-200">{totalBudget.toLocaleString('pl-PL')} PLN</strong></span>
                         </div>
@@ -981,29 +972,29 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* AKTUALNOŚCI - 2 KOLUMNY NA DUŻYCH EKRANACH */}
-              <div className="bg-slate-900 p-5 md:p-6 rounded-2xl border border-slate-800 space-y-4 shadow-lg">
+              {/* SEKCJA 2: AKTUALNOŚCI */}
+              <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4 shadow-lg">
                 <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                   <h3 className="font-bold text-xs text-white flex items-center gap-2">
                     <Megaphone className="text-amber-400" size={16} /> Aktualności Firmowe
                   </h3>
                   <button
                     onClick={() => setShowAddNewsModal(true)}
-                    className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1 hover:bg-amber-400 transition-all"
+                    className="px-2.5 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-lg text-[11px] flex items-center gap-1"
                   >
-                    <Plus size={14} /> Dodaj Komunikat
+                    <Plus size={14} /> Dodaj
                   </button>
                 </div>
 
                 {newsList.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-4 text-center">Brak komunikatów firmowych.</p>
+                  <p className="text-xs text-slate-500 py-3 text-center">Brak komunikatów.</p>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {newsList.map((item) => (
-                      <div key={item.id} className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+                      <div key={item.id} className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5">
                         <div className="flex justify-between items-start">
-                          <h4 className="font-bold text-xs md:text-sm text-amber-300">{item.title}</h4>
-                          <span className="text-[10px] text-slate-500 font-mono">{new Date(item.created_at).toLocaleDateString('pl-PL')}</span>
+                          <h4 className="font-bold text-xs text-amber-300">{item.title}</h4>
+                          <span className="text-[9px] text-slate-500 font-mono">{new Date(item.created_at).toLocaleDateString('pl-PL')}</span>
                         </div>
                         <p className="text-xs text-slate-300 leading-relaxed">{item.content}</p>
                       </div>
@@ -1016,38 +1007,38 @@ export default function AdminDashboard() {
 
           {/* TAB 2: INWESTYCJE */}
           {activeTab === 'inwestycje' && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               {selectedProjectObj && (
-                <div className="space-y-5">
-                  <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-xl text-center space-y-4">
+                <div className="space-y-4">
+                  <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl text-center space-y-3">
                     <div>
                       <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest block">WYBRANA INWESTYCJA</span>
-                      <h2 className="text-xl md:text-2xl font-black text-white mt-1">{selectedProjectObj.title}</h2>
-                      <p className="text-xs md:text-sm text-slate-400">{selectedProjectObj.location || 'Brak lokalizacji'}</p>
+                      <h2 className="text-lg md:text-xl font-black text-white mt-0.5">{selectedProjectObj.title}</h2>
+                      <p className="text-xs text-slate-400">{selectedProjectObj.location || 'Brak lokalizacji'}</p>
                     </div>
 
-                    <div className="flex justify-center pt-2">
+                    <div className="flex justify-center pt-1">
                       <div className="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-xs w-full max-w-md">
                         <button
                           onClick={() => setInwestycjeSubTab('valuations')}
-                          className={`flex-1 py-2.5 rounded-lg font-bold text-xs transition-all text-center ${
-                            inwestycjeSubTab === 'valuations' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+                          className={`flex-1 py-2 rounded-lg font-bold text-[11px] transition-all text-center ${
+                            inwestycjeSubTab === 'valuations' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400'
                           }`}
                         >
                           1. Wyceny
                         </button>
                         <button
                           onClick={() => setInwestycjeSubTab('docs')}
-                          className={`flex-1 py-2.5 rounded-lg font-bold text-xs transition-all text-center ${
-                            inwestycjeSubTab === 'docs' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+                          className={`flex-1 py-2 rounded-lg font-bold text-[11px] transition-all text-center ${
+                            inwestycjeSubTab === 'docs' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400'
                           }`}
                         >
                           2. Dokumentacja
                         </button>
                         <button
                           onClick={() => setInwestycjeSubTab('stats')}
-                          className={`flex-1 py-2.5 rounded-lg font-bold text-xs transition-all text-center ${
-                            inwestycjeSubTab === 'stats' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+                          className={`flex-1 py-2 rounded-lg font-bold text-[11px] transition-all text-center ${
+                            inwestycjeSubTab === 'stats' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400'
                           }`}
                         >
                           3. Statystyki
@@ -1056,78 +1047,77 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <div className="p-5 md:p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-5 shadow-lg">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4">
+                  <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 shadow-lg">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-3">
                       <div className="flex items-center gap-2">
                         {currentFolderId && (
                           <button
                             onClick={() => setCurrentFolderId(null)}
-                            className="p-2 bg-slate-800 text-amber-400 rounded-xl hover:bg-slate-700 transition-all"
+                            className="p-1.5 bg-slate-800 text-amber-400 rounded-lg hover:bg-slate-700"
                             title="Wróć do katalogu głównego"
                           >
-                            <ArrowLeft size={18} />
+                            <ArrowLeft size={16} />
                           </button>
                         )}
-                        <span className="text-xs md:text-sm font-bold text-slate-200 flex items-center gap-2">
-                          <FolderOpen className="text-amber-400" size={18} /> Ścieżka: {currentFolderId ? 'Wewnątrz podfolderu' : 'Katalog Główny'}
+                        <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                          <FolderOpen className="text-amber-400" size={16} /> Ścieżka: {currentFolderId ? 'Wewnątrz podfolderu' : 'Katalog Główny'}
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap gap-3 w-full sm:w-auto">
+                      <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                         <button
                           onClick={() => setShowAddFolderModal(true)}
-                          className="px-4 py-2 bg-slate-800 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-2 border border-slate-700 hover:bg-slate-750 transition-all"
+                          className="px-3.5 py-2 bg-slate-800 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-slate-700 hover:bg-slate-750"
                         >
                           <FolderPlus size={16} /> + Dodaj Folder
                         </button>
 
                         <button
                           onClick={() => setShowFileChoiceModal(true)}
-                          className="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-2 shadow-md hover:bg-amber-400 transition-all"
+                          className="px-3.5 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md hover:bg-amber-400"
                         >
                           <Plus size={16} /> + Dodaj Plik
                         </button>
                       </div>
                     </div>
 
-                    {/* USTAWIENIE W WIELOKOLUMNOWEJ SIATCE DLA KOMPUTERA */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+                    <div className="space-y-2">
                       {currentProjectFolderItems.length === 0 ? (
-                        <p className="col-span-full text-xs text-slate-500 text-center py-8">Katalog jest pusty. Użyj przycisków powyżej, aby dodać folder lub plik.</p>
+                        <p className="text-xs text-slate-500 text-center py-6">Katalog jest pusty. Użyj przycisków powyżej, aby dodać folder lub plik.</p>
                       ) : (
                         currentProjectFolderItems.map((item) => (
                           <div
                             key={item.id}
-                            className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-200 hover:border-slate-700 transition-all shadow-sm"
+                            className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-200 hover:border-slate-700 transition-all"
                           >
                             {item.isFolder ? (
                               <div
                                 onClick={() => setCurrentFolderId(item.id)}
-                                className="flex items-center gap-3 font-bold text-amber-300 hover:underline cursor-pointer truncate mr-2"
+                                className="flex items-center gap-2.5 font-bold text-amber-300 hover:underline cursor-pointer"
                               >
-                                <Folder className="text-amber-400 shrink-0" size={20} />
-                                <div className="truncate">
-                                  <p className="text-white font-bold truncate">{item.name}</p>
-                                  <p className="text-[10px] text-slate-500 font-mono font-normal">{item.createdAt}</p>
+                                <Folder className="text-amber-400 shrink-0" size={18} />
+                                <div>
+                                  <p className="text-white font-bold">{item.name}</p>
+                                  <p className="text-[10px] text-slate-500 font-mono font-normal">Utworzono: {item.createdAt}</p>
                                 </div>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-3 font-medium truncate mr-2">
-                                <File className="text-blue-400 shrink-0" size={20} />
-                                <div className="truncate">
-                                  <p className="text-slate-200 font-semibold truncate">{item.name}</p>
-                                  <p className="text-[10px] text-slate-500 font-mono">{item.createdAt}</p>
+                              <div className="flex items-center gap-2.5 font-medium">
+                                <File className="text-blue-400 shrink-0" size={18} />
+                                <div>
+                                  <p className="text-slate-200 font-semibold">{item.name}</p>
+                                  <p className="text-[10px] text-slate-500 font-mono">Dodano: {item.createdAt}</p>
                                 </div>
                               </div>
                             )}
 
-                            <div className="flex items-center gap-1.5 shrink-0">
+                            <div className="flex items-center gap-2">
                               {item.fileUrl && (
                                 <button
                                   onClick={() => setPreviewFile({ title: item.name, url: item.fileUrl })}
-                                  className="p-1.5 bg-slate-800 text-amber-400 rounded-lg hover:bg-slate-700"
+                                  className="p-1.5 bg-slate-800 text-amber-400 font-semibold rounded-lg text-[11px]"
                                 >
-                                  <Eye size={15} />
+                                  <Eye size={14} />
                                 </button>
                               )}
                               <button onClick={() => handleDeleteProjectTreeItem(item.id)} className="p-1.5 text-slate-500 hover:text-rose-400">
@@ -1146,65 +1136,65 @@ export default function AdminDashboard() {
 
           {/* TAB 3: ADMINISTRACJA */}
           {activeTab === 'admin_office' && (
-            <div className="space-y-6">
-              <div className="p-5 md:p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-5 shadow-lg">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4">
+            <div className="space-y-4">
+              <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 shadow-lg">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-3">
                   <div className="flex items-center gap-2">
                     {currentAdminFolderId && (
-                      <button onClick={() => setCurrentAdminFolderId(null)} className="p-2 bg-slate-800 text-amber-400 rounded-xl hover:bg-slate-700">
-                        <ArrowLeft size={18} />
+                      <button onClick={() => setCurrentAdminFolderId(null)} className="p-1.5 bg-slate-800 text-amber-400 rounded-lg">
+                        <ArrowLeft size={16} />
                       </button>
                     )}
-                    <h3 className="font-bold text-xs md:text-sm text-white flex items-center gap-2">
-                      <Folder className="text-amber-400" size={18} /> Kategoria: <span className="text-amber-400">{selectedAdminCategory}</span>
+                    <h3 className="font-bold text-xs text-white flex items-center gap-2">
+                      <Folder className="text-amber-400" size={16} /> Kategoria: <span className="text-amber-400">{selectedAdminCategory}</span>
                     </h3>
                   </div>
 
-                  <div className="flex flex-wrap gap-3 w-full sm:w-auto">
+                  <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                     <button
                       onClick={() => setShowAddAdminFolderModal(true)}
-                      className="px-4 py-2 bg-slate-800 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-2 border border-slate-700"
+                      className="px-3.5 py-2 bg-slate-800 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-slate-700"
                     >
                       <FolderPlus size={16} /> + Dodaj Folder
                     </button>
 
                     <button
                       onClick={() => setShowAdminFileChoiceModal(true)}
-                      className="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-2 shadow-md"
+                      className="px-3.5 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md"
                     >
                       <Plus size={16} /> + Dodaj Plik
                     </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+                <div className="space-y-2">
                   {currentAdminFolderItems.length === 0 ? (
-                    <p className="col-span-full text-xs text-slate-500 text-center py-8">Katalog jest pusty.</p>
+                    <p className="text-xs text-slate-500 text-center py-6">Katalog jest pusty.</p>
                   ) : (
                     currentAdminFolderItems.map((item) => (
-                      <div key={item.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-200">
+                      <div key={item.id} className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-200">
                         {item.isFolder ? (
                           <div
                             onClick={() => setCurrentAdminFolderId(item.id)}
-                            className="flex items-center gap-3 font-bold text-amber-300 hover:underline cursor-pointer truncate mr-2"
+                            className="flex items-center gap-2.5 font-bold text-amber-300 hover:underline cursor-pointer"
                           >
-                            <Folder className="text-amber-400 shrink-0" size={20} />
-                            <div className="truncate">
-                              <p className="text-white font-bold truncate">{item.name}</p>
-                              <p className="text-[10px] text-slate-500 font-mono font-normal">{item.createdAt}</p>
+                            <Folder className="text-amber-400 shrink-0" size={18} />
+                            <div>
+                              <p className="text-white font-bold">{item.name}</p>
+                              <p className="text-[10px] text-slate-500 font-mono font-normal">Utworzono: {item.createdAt}</p>
                             </div>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-3 font-semibold truncate mr-2">
-                            <File className="text-blue-400 shrink-0" size={20} />
-                            <div className="truncate">
-                              <p className="text-slate-200 font-semibold truncate">{item.name}</p>
-                              <p className="text-[10px] text-slate-500 font-mono">{item.createdAt}</p>
+                          <div className="flex items-center gap-2.5 font-semibold">
+                            <File className="text-blue-400 shrink-0" size={18} />
+                            <div>
+                              <p className="text-slate-200 font-semibold">{item.name}</p>
+                              <p className="text-[10px] text-slate-500 font-mono">Dodano: {item.createdAt}</p>
                             </div>
                           </div>
                         )}
 
-                        <button onClick={() => handleDeleteAdminTreeItem(item.id)} className="p-1.5 text-slate-500 hover:text-rose-400 shrink-0">
+                        <button onClick={() => handleDeleteAdminTreeItem(item.id)} className="p-1.5 text-slate-500 hover:text-rose-400">
                           <Trash2 size={15} />
                         </button>
                       </div>
@@ -1215,13 +1205,13 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* TAB 4: PRACOWNICI */}
+          {/* TAB 4: PRACOWNICI (Z LICZNIKAMI STATUSÓW ONLINE / L4 / URLOP / OFFLINE) */}
           {activeTab === 'workers' && (
-            <div className="space-y-6">
-              {/* KAFELKI PODSUMOWANIA PRACOWNIKÓW */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="p-4 bg-slate-900 border border-emerald-500/30 rounded-2xl flex items-center gap-3.5 shadow-md">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-sm">
+            <div className="space-y-5">
+              {/* STATUSY PRACOWNIKÓW - KAFELKI PODSUMOWANIA */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 bg-slate-900 border border-emerald-500/30 rounded-2xl flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold">
                     {workerStats.online}
                   </div>
                   <div>
@@ -1230,8 +1220,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="p-4 bg-slate-900 border border-blue-500/30 rounded-2xl flex items-center gap-3.5 shadow-md">
-                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-sm">
+                <div className="p-3.5 bg-slate-900 border border-blue-500/30 rounded-2xl flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold">
                     {workerStats.l4}
                   </div>
                   <div>
@@ -1240,8 +1230,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="p-4 bg-slate-900 border border-amber-500/30 rounded-2xl flex items-center gap-3.5 shadow-md">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-sm">
+                <div className="p-3.5 bg-slate-900 border border-amber-500/30 rounded-2xl flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold">
                     {workerStats.vacation}
                   </div>
                   <div>
@@ -1250,8 +1240,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl flex items-center gap-3.5 shadow-md">
-                  <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 font-bold text-sm">
+                <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 font-bold">
                     {workerStats.absent}
                   </div>
                   <div>
@@ -1261,40 +1251,38 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* LISTA WNIOSKÓW URLOPOWYCH */}
+              {/* WNIOSKI URLOPOWE */}
               {leaveRequests.filter((l) => l.status === 'pending').length > 0 && (
-                <div className="p-5 bg-amber-950/30 border border-amber-500/40 rounded-2xl space-y-3">
+                <div className="p-4 bg-amber-950/30 border border-amber-500/40 rounded-2xl space-y-3">
                   <h4 className="font-bold text-xs text-amber-300">Wnioski Urlopowe Oczekujące na Akceptację</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {leaveRequests
-                      .filter((l) => l.status === 'pending')
-                      .map((req) => (
-                        <div key={req.id} className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl flex justify-between items-center text-xs">
-                          <div>
-                            <p className="font-bold text-white">{req.profiles?.full_name}</p>
-                            <p className="text-slate-400">{req.type} ({req.start_date} - {req.end_date})</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <button onClick={() => handleLeaveDecision(req.id, 'Zatwierdzony')} className="p-2 bg-emerald-600 text-white rounded-lg">
-                              <Check size={16} />
-                            </button>
-                            <button onClick={() => handleLeaveDecision(req.id, 'Odrzucony')} className="p-2 bg-rose-600 text-white rounded-lg">
-                              <X size={16} />
-                            </button>
-                          </div>
+                  {leaveRequests
+                    .filter((l) => l.status === 'pending')
+                    .map((req) => (
+                      <div key={req.id} className="p-3 bg-slate-900 border border-slate-800 rounded-xl flex justify-between items-center text-xs">
+                        <div>
+                          <p className="font-bold text-white">{req.profiles?.full_name}</p>
+                          <p className="text-slate-400">{req.type} ({req.start_date} - {req.end_date})</p>
                         </div>
-                      ))}
-                  </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => handleLeaveDecision(req.id, 'Zatwierdzony')} className="p-2 bg-emerald-600 text-white rounded-lg">
+                            <Check size={14} />
+                          </button>
+                          <button onClick={() => handleLeaveDecision(req.id, 'Odrzucony')} className="p-2 bg-rose-600 text-white rounded-lg">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                 </div>
               )}
 
-              {/* TABELA PRACOWNIKÓW - DWUKOLUMNOWA NA KOMPUTERZE */}
+              {/* LISTA PRACOWNIKÓW */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-                <div className="p-4 md:px-6 border-b border-slate-800 font-bold text-xs uppercase tracking-wider text-slate-300">
+                <div className="p-4 border-b border-slate-800 font-bold text-xs uppercase tracking-wider text-slate-300">
                   Lista Wszystkich Pracowników ({workers.length})
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800">
+                <div className="divide-y divide-slate-800">
                   {workers.map((w) => {
                     let statusBadge = <span className="text-rose-400">🔴 Offline</span>
                     if (w.status === 'working') statusBadge = <span className="text-emerald-400 font-bold">🟢 ZALOGOWANY</span>
@@ -1310,7 +1298,7 @@ export default function AdminDashboard() {
                           setEditingWorkerAllowance(w.daily_allowance || '0')
                           setEditingWorkerPhone(w.phone || '')
                         }}
-                        className="p-4 md:px-6 hover:bg-slate-850 cursor-pointer flex justify-between items-center transition-all border-b border-slate-800/60"
+                        className="p-4 hover:bg-slate-850 cursor-pointer flex justify-between items-center transition-all"
                       >
                         <div>
                           <h4 className="font-bold text-sm text-white">{w.full_name}</h4>
@@ -1318,7 +1306,7 @@ export default function AdminDashboard() {
                         </div>
                         <div className="text-right text-xs">
                           {statusBadge}
-                          <p className="text-[11px] text-slate-500 mt-1 font-mono font-semibold">{w.hourly_rate || 35} PLN/h</p>
+                          <p className="text-[10px] text-slate-500 mt-1 font-mono">{w.hourly_rate || 35} PLN/h</p>
                         </div>
                       </div>
                     )
@@ -1328,31 +1316,32 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* TAB 5: ZAMÓWIENIA */}
+          {/* TAB 5: ZAMÓWIENIA (Z PODZIAŁEM NA BRYGADZISTĘ I ADMINA) */}
           {activeTab === 'orders' && (
-            <div className="space-y-5">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                {/* PRZEŁĄCZNIK PODZIAŁU ZAMÓWIEŃ */}
                 <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs w-full sm:w-auto">
                   <button
                     onClick={() => setOrderFilterTab('all')}
-                    className={`px-4 py-2 rounded-lg font-bold text-xs transition-all ${
-                      orderFilterTab === 'all' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] transition-all ${
+                      orderFilterTab === 'all' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400'
                     }`}
                   >
                     Wszystkie ({orders.length})
                   </button>
                   <button
                     onClick={() => setOrderFilterTab('foreman')}
-                    className={`px-4 py-2 rounded-lg font-bold text-xs transition-all ${
-                      orderFilterTab === 'foreman' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] transition-all ${
+                      orderFilterTab === 'foreman' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400'
                     }`}
                   >
                     👨‍🔧 Od Brygadzistów
                   </button>
                   <button
                     onClick={() => setOrderFilterTab('admin')}
-                    className={`px-4 py-2 rounded-lg font-bold text-xs transition-all ${
-                      orderFilterTab === 'admin' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] transition-all ${
+                      orderFilterTab === 'admin' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400'
                     }`}
                   >
                     👑 Własne Admina
@@ -1361,49 +1350,47 @@ export default function AdminDashboard() {
 
                 <button
                   onClick={() => setShowCreateAdminOrderModal(true)}
-                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg w-full sm:w-auto justify-center"
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg w-full sm:w-auto justify-center"
                 >
                   <Plus size={16} /> Dodaj Własne Zamówienie
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
                 {filteredOrders.length === 0 ? (
-                  <p className="col-span-full text-xs text-slate-500 text-center py-10">Brak zamówień w tej kategorii.</p>
+                  <p className="text-xs text-slate-500 text-center py-8">Brak zamówień w tej kategorii.</p>
                 ) : (
                   filteredOrders.map((ord) => {
                     const isForemanOrder = Boolean(ord.profiles?.full_name || ord.created_by)
 
                     return (
-                      <div key={ord.id} className="p-5 bg-slate-900 border border-slate-800 rounded-2xl space-y-3 shadow-md flex flex-col justify-between">
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h4 className="font-bold text-sm text-white">{ord.item_name}</h4>
-                                <span
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                    isForemanOrder ? 'bg-indigo-500/20 text-indigo-300' : 'bg-purple-500/20 text-purple-300'
-                                  }`}
-                                >
-                                  {isForemanOrder ? `👨‍🔧 ${ord.profiles?.full_name || 'Brygadzista'}` : '👑 Admin'}
-                                </span>
-                              </div>
-                              <p className="text-xs text-blue-400 font-semibold mt-1">{ord.projects?.title || 'Budowa nieokreślona'}</p>
+                      <div key={ord.id} className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-2.5 shadow-md">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-bold text-sm text-white">{ord.item_name}</h4>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  isForemanOrder ? 'bg-indigo-500/20 text-indigo-300' : 'bg-purple-500/20 text-purple-300'
+                                }`}
+                              >
+                                {isForemanOrder ? `👨‍🔧 Brygadzista: ${ord.profiles?.full_name || 'Brygadzista'}` : '👑 Zamówienie Admina'}
+                              </span>
                             </div>
-                            <span className="px-2.5 py-1 bg-blue-500/20 text-blue-300 rounded-lg text-[10px] font-bold">
-                              {ord.status.toUpperCase()}
-                            </span>
+                            <p className="text-xs text-blue-400 font-semibold mt-0.5">{ord.projects?.title || 'Budowa nieokreślona'}</p>
                           </div>
-
-                          <p className="text-xs text-slate-400 font-mono">Ilość: {ord.quantity || 'Nieokreślono'}</p>
+                          <span className="px-2.5 py-1 bg-blue-500/20 text-blue-300 rounded-lg text-[10px] font-bold">
+                            {ord.status.toUpperCase()}
+                          </span>
                         </div>
 
+                        <p className="text-xs text-slate-400 font-mono">Ilość: {ord.quantity || 'Nieokreślono'}</p>
+
                         {ord.status === 'pending' && (
-                          <div className="pt-3 border-t border-slate-800">
+                          <div className="flex gap-2 pt-2 border-t border-slate-800">
                             <button
                               onClick={() => handleApproveOrderModal(ord)}
-                              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-md transition-all"
+                              className="flex-1 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs shadow-md"
                             >
                               Zatwierdź & Dostawa
                             </button>
@@ -1419,39 +1406,39 @@ export default function AdminDashboard() {
 
           {/* TAB 6: USTAWIENIA */}
           {activeTab === 'settings' && (
-            <form onSubmit={handleSaveCompanySettings} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 max-w-2xl mx-auto shadow-xl">
-              <h3 className="font-bold text-sm text-white border-b border-slate-800 pb-3">Ustawienia Nazwy Firmy, Logo i Admina</h3>
-              <div className="space-y-4 text-xs">
+            <form onSubmit={handleSaveCompanySettings} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 max-w-xl">
+              <h3 className="font-bold text-xs text-white border-b border-slate-800 pb-3">Ustawienia Nazwy Firmy, Logo i Admina</h3>
+              <div className="space-y-3 text-xs">
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Pełna Nazwa Firmy:</label>
+                  <label className="block text-slate-400 mb-1">Pełna Nazwa Firmy:</label>
                   <input
                     type="text"
                     value={company.name}
                     onChange={(e) => setCompany({ ...company, name: e.target.value })}
-                    className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-white font-bold text-sm"
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-bold"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Adres Firmy:</label>
+                  <label className="block text-slate-400 mb-1">Adres Firmy:</label>
                   <input
                     type="text"
                     value={company.address}
                     onChange={(e) => setCompany({ ...company, address: e.target.value })}
-                    className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">URL Logo Firmy:</label>
+                  <label className="block text-slate-400 mb-1">URL Logo Firmy:</label>
                   <input
                     type="text"
                     value={company.logo_url}
                     onChange={(e) => setCompany({ ...company, logo_url: e.target.value })}
-                    className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono"
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono"
                   />
                 </div>
               </div>
-              <button type="submit" disabled={loading} className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-lg transition-all">
-                Zapisz Ustawienia Firmy
+              <button type="submit" disabled={loading} className="w-full py-3 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs shadow-lg">
+                Zapisz Ustawienia
               </button>
             </form>
           )}
@@ -1553,17 +1540,17 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* MODAL: DODAWANIE BUDOWY (Z OBSŁUGĄ WSPÓŁRZĘDNYCH DLA SUPABASE) */}
+      {/* MODAL: DODAWANIE BUDOWY */}
       {showAddProjectModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <form onSubmit={handleCreateProjectSubmit} className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 space-y-4 shadow-2xl">
+          <form onSubmit={handleCreateProjectSubmit} className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h4 className="font-bold text-sm text-white">Dodaj Nową Budowę</h4>
               <button type="button" onClick={() => setShowAddProjectModal(false)} className="text-slate-400 hover:text-white">
                 <X size={18} />
               </button>
             </div>
-            <div className="space-y-3.5 text-xs">
+            <div className="space-y-3 text-xs">
               <div>
                 <label className="block text-slate-400 mb-1 font-semibold">Nazwa Inwestycji / Budowy *</label>
                 <input
@@ -1572,17 +1559,17 @@ export default function AdminDashboard() {
                   placeholder="np. Osiedle Słoneczne Etap 2"
                   value={newProjTitle}
                   onChange={(e) => setNewProjTitle(e.target.value)}
-                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:border-amber-500 focus:outline-none"
+                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:border-amber-500 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">Lokalizacja / Adres</label>
+                <label className="block text-slate-400 mb-1 font-semibold">Lokalizacja</label>
                 <input
                   type="text"
                   placeholder="np. Warszawa, ul. Prosta 12"
                   value={newProjLocation}
                   onChange={(e) => setNewProjLocation(e.target.value)}
-                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:border-amber-500 focus:outline-none"
+                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:border-amber-500 focus:outline-none"
                 />
               </div>
               <div>
@@ -1592,15 +1579,15 @@ export default function AdminDashboard() {
                   placeholder="500000"
                   value={newProjBudget}
                   onChange={(e) => setNewProjBudget(e.target.value)}
-                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:border-amber-500 focus:outline-none"
+                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:border-amber-500 focus:outline-none"
                 />
               </div>
             </div>
-            <div className="flex gap-2.5 pt-2">
-              <button type="button" onClick={() => setShowAddProjectModal(false)} className="flex-1 py-3 bg-slate-800 text-slate-300 font-semibold rounded-xl text-xs">
+            <div className="flex gap-2 pt-2">
+              <button type="button" onClick={() => setShowAddProjectModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 font-semibold rounded-xl text-xs">
                 Anuluj
               </button>
-              <button type="submit" disabled={loading} className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow-md">
+              <button type="submit" disabled={loading} className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-xl text-xs shadow-md">
                 {loading ? 'Tworzenie...' : 'Utwórz Budowę'}
               </button>
             </div>
@@ -1772,7 +1759,7 @@ export default function AdminDashboard() {
       {/* MODAL: EDYCJA PRACOWNIKA */}
       {selectedWorker && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-5 space-y-4 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-5 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h4 className="font-bold text-sm text-white">Profil: {selectedWorker.full_name}</h4>
               <button onClick={() => setSelectedWorker(null)} className="text-slate-400 hover:text-white">
@@ -1950,19 +1937,19 @@ export default function AdminDashboard() {
       {/* LIGHTBOX PODGLĄDU PLIKÓW */}
       {previewFile && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-2xl overflow-hidden flex flex-col justify-between max-h-[85vh] my-auto shadow-2xl">
-            <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl overflow-hidden flex flex-col justify-between max-h-[80vh] my-auto">
+            <div className="p-3.5 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
               <h4 className="text-xs font-bold text-white truncate pr-2">{previewFile.title}</h4>
               <button onClick={() => setPreviewFile(null)} className="p-1 text-slate-400 hover:text-white bg-slate-700 rounded-lg">
                 <X size={18} />
               </button>
             </div>
-            <div className="p-4 flex items-center justify-center overflow-auto max-h-[60vh] bg-slate-950">
-              <img src={previewFile.url} alt={previewFile.title} className="max-w-full max-h-[55vh] object-contain rounded-lg" />
+            <div className="p-4 flex items-center justify-center overflow-auto max-h-[50vh] bg-slate-950">
+              <img src={previewFile.url} alt={previewFile.title} className="max-w-full max-h-[45vh] object-contain rounded-lg" />
             </div>
-            <div className="p-4 bg-slate-800 border-t border-slate-700">
+            <div className="p-3.5 bg-slate-800 border-t border-slate-700">
               <button onClick={() => setPreviewFile(null)} className="w-full py-2.5 bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs">
-                Zamknij Podgląd
+                Zamknij
               </button>
             </div>
           </div>
